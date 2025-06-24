@@ -1,307 +1,379 @@
-"""主窗口"""
+"""主窗口模块"""
 
 from PyQt6.QtWidgets import (
-    QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, 
-    QLabel, QScrollArea, QPushButton, QFileDialog, 
-    QMessageBox, QStatusBar
+    QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QMenuBar, 
+    QStatusBar, QSpinBox, QLabel, QPushButton, QFileDialog, 
+    QMessageBox, QSplitter, QFrame
 )
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QAction, QCloseEvent
-from PyQt6.QtWidgets import QApplication
-from core.pdf_document import PDFDocument
-from ui.pdf_widget import VirtualPDFWidget
-from utils.constants import *  # noqa: F403
+from PyQt6.QtCore import Qt, pyqtSlot
+from PyQt6.QtGui import QAction
+import os
+
+from ui.pdf_widget import PDFWidget
+from ui.components import LoadingWidget, SyncScrollArea, StatusLabel
+from core.translation import TranslationManager
+from utils.constants import *
 
 
-DEFAULT_ZOOM = 1.0
-MAX_ZOOM = 10.0
-MIN_ZOOM = 0.1
-ZOOM_STEP = 1.1
-SCROLL_RESTORE_DELAY = 100
-
-
-class PDFViewer(QMainWindow):
-    """PDF查看器主窗口"""
+class MainWindow(QMainWindow):
+    """主窗口"""
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("高性能连续PDF预览器")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setWindowTitle("PDF 双语预览器")
+        self.setGeometry(100, 100, 1600, 900)
         
-        # 初始化
-        self.pdf_doc = PDFDocument()
-        self.zoom_factor = DEFAULT_ZOOM
-        self.current_page = 0
-        self.selected_text = ""
-        self._closing = False
+        # 初始化组件
+        self.current_file = None
+        self.translation_manager = TranslationManager()
         
-        self._setup_ui()
+        # 创建UI
+        self.setup_ui()
+        self.setup_menu()
+        self.setup_status_bar()
+        self.setup_connections()
         
-    def _setup_ui(self):
-        """设置界面"""
-        self._create_menu()
-        self._create_toolbar()
-        self._create_pdf_area()
-        self._create_status_bar()
+    def setup_ui(self):
+        """设置UI界面"""
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
         
-    def _create_menu(self):
-        """创建菜单"""
+        # 主布局
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # 工具栏
+        toolbar_layout = QHBoxLayout()
+        
+        # 文件操作按钮
+        self.open_btn = QPushButton("打开PDF文件")
+        self.open_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #007acc;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #005a9e;
+            }
+        """)
+        toolbar_layout.addWidget(self.open_btn)
+        
+        toolbar_layout.addStretch()
+        
+        # 缩放控制
+        zoom_layout = QHBoxLayout()
+        zoom_layout.addWidget(QLabel("缩放:"))
+        
+        self.zoom_out_btn = QPushButton("−")
+        self.zoom_out_btn.setFixedSize(30, 30)
+        zoom_layout.addWidget(self.zoom_out_btn)
+        
+        self.zoom_spinbox = QSpinBox()
+        self.zoom_spinbox.setRange(int(MIN_ZOOM * 100), int(MAX_ZOOM * 100))
+        self.zoom_spinbox.setValue(int(DEFAULT_ZOOM * 100))
+        self.zoom_spinbox.setSuffix("%")
+        self.zoom_spinbox.setFixedWidth(80)
+        zoom_layout.addWidget(self.zoom_spinbox)
+        
+        self.zoom_in_btn = QPushButton("+")
+        self.zoom_in_btn.setFixedSize(30, 30)
+        zoom_layout.addWidget(self.zoom_in_btn)
+        
+        toolbar_layout.addLayout(zoom_layout)
+        main_layout.addLayout(toolbar_layout)
+        
+        # 分割器 - 左右两个预览区
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # 左侧预览区（原始PDF）
+        left_frame = QFrame()
+        left_frame.setFrameStyle(QFrame.Shape.StyledPanel)
+        left_layout = QVBoxLayout(left_frame)
+        left_layout.setContentsMargins(2, 2, 2, 2)
+        
+        # 左侧标题
+        left_title = QLabel("原始文档")
+        left_title.setStyleSheet("""
+            QLabel {
+                background-color: #f8f9fa;
+                padding: 8px;
+                border-bottom: 1px solid #dee2e6;
+                font-weight: bold;
+                color: #495057;
+            }
+        """)
+        left_layout.addWidget(left_title)
+        
+        # 左侧PDF查看器
+        self.left_pdf_widget = PDFWidget()
+        left_layout.addWidget(self.left_pdf_widget)
+        
+        # 右侧预览区（翻译PDF）
+        right_frame = QFrame()
+        right_frame.setFrameStyle(QFrame.Shape.StyledPanel)
+        right_layout = QVBoxLayout(right_frame)
+        right_layout.setContentsMargins(2, 2, 2, 2)
+        
+        # 右侧标题
+        right_title = QLabel("翻译文档")
+        right_title.setStyleSheet("""
+            QLabel {
+                background-color: #f8f9fa;
+                padding: 8px;
+                border-bottom: 1px solid #dee2e6;
+                font-weight: bold;
+                color: #495057;
+            }
+        """)
+        right_layout.addWidget(right_title)
+        
+        # 右侧PDF查看器
+        self.right_pdf_widget = PDFWidget()
+        right_layout.addWidget(self.right_pdf_widget)
+        
+        # 右侧加载动画（初始隐藏）
+        self.loading_widget = LoadingWidget("等待上传PDF文件...")
+        right_layout.addWidget(self.loading_widget)
+        self.loading_widget.hide()
+        
+        # 添加到分割器
+        self.splitter.addWidget(left_frame)
+        self.splitter.addWidget(right_frame)
+        self.splitter.setSizes([800, 800])  # 初始均分
+        
+        main_layout.addWidget(self.splitter)
+        
+        # 设置同步滚动
+        self.sync_scroll = SyncScrollArea(
+            self.left_pdf_widget.scroll_area, 
+            self.right_pdf_widget.scroll_area
+        )
+        
+    def setup_menu(self):
+        """设置菜单"""
         menubar = self.menuBar()
         
         # 文件菜单
-        file_menu = menubar.addMenu('文件')
+        file_menu = menubar.addMenu("文件")
         
-        open_action = QAction('打开PDF', self)
-        open_action.setShortcut('Ctrl+O')
+        open_action = QAction("打开PDF", self)
+        open_action.setShortcut("Ctrl+O")
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
         
         file_menu.addSeparator()
         
-        exit_action = QAction('退出', self)
-        exit_action.setShortcut('Ctrl+Q')
+        exit_action = QAction("退出", self)
+        exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
-        # 编辑菜单
-        edit_menu = menubar.addMenu('编辑')
+        # 视图菜单
+        view_menu = menubar.addMenu("视图")
         
-        copy_action = QAction('复制', self)
-        copy_action.setShortcut('Ctrl+C')
-        copy_action.triggered.connect(self.copy_text)
-        edit_menu.addAction(copy_action)
+        sync_action = QAction("同步滚动", self)
+        sync_action.setCheckable(True)
+        sync_action.setChecked(True)
+        sync_action.triggered.connect(self.toggle_sync_scroll)
+        view_menu.addAction(sync_action)
         
-    def _create_toolbar(self):
-        """创建工具栏"""
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        
-        self.main_layout = QVBoxLayout(central_widget)
-        
-        toolbar = QHBoxLayout()
-        
-        # 页面信息
-        self.page_label = QLabel('页面: 0 / 0')
-        toolbar.addWidget(self.page_label)
-        
-        toolbar.addStretch()
-        
-        # 缩放控制
-        zoom_out_btn = QPushButton('缩小 (-)')
-        zoom_out_btn.clicked.connect(self.zoom_out)
-        toolbar.addWidget(zoom_out_btn)
-        
-        self.zoom_label = QLabel(f'{int(DEFAULT_ZOOM * 100)}%')
-        toolbar.addWidget(self.zoom_label)
-        
-        zoom_in_btn = QPushButton('放大 (+)')
-        zoom_in_btn.clicked.connect(self.zoom_in)
-        toolbar.addWidget(zoom_in_btn)
-        
-        reset_btn = QPushButton('重置')
-        reset_btn.clicked.connect(self.reset_zoom)
-        toolbar.addWidget(reset_btn)
-        
-        self.main_layout.addLayout(toolbar)
-        
-    def _create_pdf_area(self):
-        """创建PDF显示区域"""
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(False)
-        self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        self.pdf_widget = VirtualPDFWidget()
-        self.pdf_widget.text_selected.connect(self.on_text_selected)
-        self.pdf_widget.page_changed.connect(self.on_page_changed)
-        
-        # 占位符
-        placeholder = QLabel(
-            "请打开PDF文件\n\n功能特点：\n• 连续滚动浏览\n• 虚拟渲染技术\n• 精确文本选择\n• Ctrl+滚轮缩放"
-        )
-        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        placeholder.setStyleSheet(
-            "QLabel { background: #f8f9fa; padding: 50px; font-size: 16px; color: #666; }"
-        )
-        
-        self.scroll_area.setWidget(placeholder)
-        self.main_layout.addWidget(self.scroll_area)
-        
-        # 绑定事件
-        self.scroll_area.verticalScrollBar().valueChanged.connect(self.on_scroll)
-        self.scroll_area.wheelEvent = self.wheel_event
-        
-    def _create_status_bar(self):
-        """创建状态栏"""
+    def setup_status_bar(self):
+        """设置状态栏"""
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("就绪")
         
+        # 状态标签
+        self.status_label = StatusLabel()
+        self.status_bar.addWidget(self.status_label)
+        
+        # 页面信息
+        self.page_info_label = QLabel("无文档")
+        self.status_bar.addPermanentWidget(self.page_info_label)
+        
+    def setup_connections(self):
+        """设置信号连接"""
+        # 文件操作
+        self.open_btn.clicked.connect(self.open_file)
+        
+        # 缩放控制
+        self.zoom_in_btn.clicked.connect(self.zoom_in)
+        self.zoom_out_btn.clicked.connect(self.zoom_out)
+        self.zoom_spinbox.valueChanged.connect(self.on_zoom_changed)
+        
+        # PDF查看器信号
+        self.left_pdf_widget.page_changed.connect(self.on_page_changed)
+        self.left_pdf_widget.text_selected.connect(self.on_text_selected)
+        
+        # 翻译管理器信号
+        self.translation_manager.current_thread = None
+        
+    @pyqtSlot()
     def open_file(self):
-        """打开文件"""
-        if self._closing:
-            return
-            
+        """打开PDF文件"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "选择PDF文件", "", "PDF文件 (*.pdf)"
+            self, "选择PDF文件", "", "PDF files (*.pdf)"
         )
         
         if file_path:
-            self.load_pdf(file_path)
+            self.load_pdf_file(file_path)
             
-    def load_pdf(self, file_path):
-        """加载PDF"""
-        if self._closing:
-            return
-            
-        success, message = self.pdf_doc.load(file_path)
-        
-        if success:
-            self.status_bar.showMessage("正在初始化PDF显示...")
-            
-            # 设置PDF widget
-            self.pdf_widget.set_document(self.pdf_doc, self.zoom_factor)
-            self.scroll_area.setWidget(self.pdf_widget)
-            
-            # 更新界面
-            self.page_label.setText(f'页面: 1 / {self.pdf_doc.total_pages}')
-            self.zoom_label.setText(f'{int(self.zoom_factor * 100)}%')
-            
-            # 触发初始加载
-            QApplication.processEvents()
-            self.on_scroll(0)
-            
-            filename = file_path.split('/')[-1]
-            self.status_bar.showMessage(f"已载入: {filename} ({self.pdf_doc.total_pages} 页)")
-        else:
-            QMessageBox.critical(self, "错误", f"无法打开PDF:\n{message}")
-            
-    def wheel_event(self, event):
-        """滚轮事件"""
-        if self._closing:
-            return
-            
-        modifiers = QApplication.keyboardModifiers()
-        
-        if modifiers == Qt.KeyboardModifier.ControlModifier:
-            delta = event.angleDelta().y()
-            if delta > 0:
-                self.zoom_in()
+    def load_pdf_file(self, file_path):
+        """加载PDF文件"""
+        try:
+            # 加载到左侧预览器
+            if self.left_pdf_widget.load_pdf(file_path):
+                self.current_file = file_path
+                
+                # 更新状态
+                filename = os.path.basename(file_path)
+                self.status_label.set_status(f"已加载: {filename}", "success")
+                
+                # 更新页面信息
+                if self.left_pdf_widget.doc:
+                    total_pages = self.left_pdf_widget.doc.page_count
+                    self.page_info_label.setText(f"共 {total_pages} 页")
+                
+                # 显示右侧加载动画
+                self.right_pdf_widget.hide()
+                self.loading_widget.show()
+                self.loading_widget.set_message("正在准备翻译...")
+                
+                # 开始翻译
+                self.start_translation(file_path)
+                
             else:
-                self.zoom_out()
-        else:
-            QScrollArea.wheelEvent(self.scroll_area, event)
+                QMessageBox.warning(self, "错误", "无法打开PDF文件")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"加载文件时出错: {str(e)}")
             
+    def start_translation(self, file_path):
+        """开始翻译PDF"""
+        try:
+            self.translation_manager.start_translation(
+                file_path,
+                progress_callback=self.on_translation_progress,
+                completed_callback=self.on_translation_completed,
+                failed_callback=self.on_translation_failed
+            )
+        except Exception as e:
+            self.on_translation_failed(f"启动翻译失败: {str(e)}")
+        
+    @pyqtSlot(str)
+    def on_translation_progress(self, message):
+        """翻译进度更新"""
+        try:
+            self.loading_widget.set_message(message)
+            self.status_label.set_status(message, "info")
+        except Exception as e:
+            print(f"更新翻译进度时出错: {e}")
+        
+    @pyqtSlot(str)
+    def on_translation_completed(self, translated_file):
+        """翻译完成"""
+        try:
+            # 检查翻译文件是否存在
+            if not os.path.exists(translated_file):
+                self.on_translation_failed("翻译文件不存在")
+                return
+            
+            # 记录翻译文件
+            self.translation_manager.set_translated_file(self.current_file, translated_file)
+            
+            # 加载翻译后的文件到右侧
+            if self.right_pdf_widget.load_pdf(translated_file):
+                # 隐藏加载动画，显示右侧预览器
+                self.loading_widget.hide()
+                self.right_pdf_widget.show()
+                
+                # 同步缩放
+                zoom_factor = self.left_pdf_widget.zoom_factor
+                self.right_pdf_widget.set_zoom(zoom_factor)
+                
+                # 启用同步滚动
+                self.sync_scroll.set_enabled(True)
+                
+                filename = os.path.basename(translated_file)
+                self.status_label.set_status(f"翻译完成: {filename}", "success")
+            else:
+                self.on_translation_failed("无法加载翻译后的文件")
+                
+        except Exception as e:
+            self.on_translation_failed(f"加载翻译文件时出错: {str(e)}")
+            
+    @pyqtSlot(str)
+    def on_translation_failed(self, error_message):
+        """翻译失败"""
+        try:
+            # 隐藏加载动画
+            self.loading_widget.hide()
+            
+            # 显示错误状态
+            self.status_label.set_status(f"翻译失败: {error_message}", "error")
+            
+            # 显示错误对话框（非阻塞）
+            error_dialog = QMessageBox(self)
+            error_dialog.setWindowTitle("翻译失败")
+            error_dialog.setText("PDF翻译过程中出现错误")
+            error_dialog.setDetailedText(error_message)
+            error_dialog.setIcon(QMessageBox.Icon.Warning)
+            error_dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
+            error_dialog.show()
+            
+        except Exception as e:
+            print(f"处理翻译失败时出错: {e}")
+        
+    @pyqtSlot()
     def zoom_in(self):
         """放大"""
-        if self._closing or self.zoom_factor >= MAX_ZOOM:
-            return
-            
-        old_ratio = self._get_scroll_ratio()
-        self.zoom_factor *= ZOOM_STEP
-        self._refresh_view(old_ratio)
-            
+        current_zoom = self.zoom_spinbox.value()
+        new_zoom = min(current_zoom + 25, int(MAX_ZOOM * 100))
+        self.zoom_spinbox.setValue(new_zoom)
+        
+    @pyqtSlot()
     def zoom_out(self):
         """缩小"""
-        if self._closing or self.zoom_factor <= MIN_ZOOM:
-            return
-            
-        old_ratio = self._get_scroll_ratio()
-        self.zoom_factor /= ZOOM_STEP
-        self._refresh_view(old_ratio)
-    
-    def reset_zoom(self):
-        """重置缩放"""
-        if self._closing:
-            return
-            
-        old_ratio = self._get_scroll_ratio()
-        self.zoom_factor = DEFAULT_ZOOM
-        self._refresh_view(old_ratio)
-            
-    def _get_scroll_ratio(self):
-        """获取滚动比例"""
-        scrollbar = self.scroll_area.verticalScrollBar()
-        if scrollbar.maximum() > 0:
-            return scrollbar.value() / scrollbar.maximum()
-        return 0
+        current_zoom = self.zoom_spinbox.value()
+        new_zoom = max(current_zoom - 25, int(MIN_ZOOM * 100))
+        self.zoom_spinbox.setValue(new_zoom)
         
-    def _refresh_view(self, scroll_ratio=0):
-        """刷新视图"""
-        if self._closing or not self.pdf_doc.doc:
-            return
+    @pyqtSlot(int)
+    def on_zoom_changed(self, value):
+        """缩放改变"""
+        zoom_factor = value / 100.0
+        self.left_pdf_widget.set_zoom(zoom_factor)
+        if self.right_pdf_widget.doc:  # 只有加载了文档才同步缩放
+            self.right_pdf_widget.set_zoom(zoom_factor)
             
-        self.status_bar.showMessage(f"正在重新渲染 (缩放: {int(self.zoom_factor * 100)}%)...")
-        
-        self.pdf_widget.set_document(self.pdf_doc, self.zoom_factor)
-        self.zoom_label.setText(f'{int(self.zoom_factor * 100)}%')
-        
-        QApplication.processEvents()
-        
-        # 恢复滚动位置
-        QTimer.singleShot(SCROLL_RESTORE_DELAY, lambda: self._restore_scroll_position(scroll_ratio))
-        
-        self.status_bar.showMessage(f"缩放完成: {int(self.zoom_factor * 100)}%")
-    
-    def _restore_scroll_position(self, scroll_ratio):
-        """恢复滚动位置"""
-        if self._closing:
-            return
-            
-        scrollbar = self.scroll_area.verticalScrollBar()
-        if scrollbar.maximum() > 0:
-            new_value = int(scroll_ratio * scrollbar.maximum())
-            scrollbar.setValue(new_value)
-            
-    def on_scroll(self, value):
-        """滚动事件"""
-        if self._closing or not self.pdf_doc.doc:
-            return
-            
-        viewport_height = self.scroll_area.viewport().height()
-        self.pdf_widget.update_viewport(value, viewport_height)
-            
+    @pyqtSlot(int)
     def on_page_changed(self, page_num):
         """页面改变"""
-        if not self._closing:
-            self.current_page = page_num
-            self.page_label.setText(f'页面: {page_num + 1} / {self.pdf_doc.total_pages}')
-        
+        if self.left_pdf_widget.doc:
+            total_pages = self.left_pdf_widget.doc.page_count
+            self.page_info_label.setText(f"第 {page_num + 1} 页 / 共 {total_pages} 页")
+            
+    @pyqtSlot(str)
     def on_text_selected(self, text):
-        """文本选择"""
-        if not self._closing:
-            self.selected_text = text
-            word_count = len(text.split())
-            self.status_bar.showMessage(f"已选择: {word_count} 词 - Ctrl+C复制")
+        """文本选中"""
+        if text.strip():
+            self.status_label.set_status(f"已选择文本: {text[:50]}...", "info")
+            
+    @pyqtSlot(bool)
+    def toggle_sync_scroll(self, enabled):
+        """切换同步滚动"""
+        self.sync_scroll.set_enabled(enabled)
         
-    def copy_text(self):
-        """复制文本"""
-        if self._closing:
-            return
-            
-        if self.selected_text:
-            QApplication.clipboard().setText(self.selected_text)
-            self.status_bar.showMessage("已复制到剪贴板")
-        else:
-            self.status_bar.showMessage("没有选中文本")
-            
-    def closeEvent(self, event: QCloseEvent):
+    def closeEvent(self, event):
         """关闭事件"""
-        print("开始关闭主窗口...")
-        self._closing = True
+        # 清理翻译管理器
+        self.translation_manager.cleanup()
         
-        # 显示关闭进度
-        self.status_bar.showMessage("正在关闭，请稍候...")
-        QApplication.processEvents()
+        # 清理PDF查看器
+        self.left_pdf_widget.cleanup()
+        self.right_pdf_widget.cleanup()
         
-        # 清理PDF widget
-        if hasattr(self, 'pdf_widget'):
-            self.pdf_widget.cleanup_threads()
-        
-        # 关闭PDF文档
-        self.pdf_doc.close()
-        
-        # 确保所有事件处理完成
-        QApplication.processEvents()
-        
-        print("主窗口关闭完成")
-        event.accept() 
+        super().closeEvent(event) 

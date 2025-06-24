@@ -22,11 +22,18 @@ from pdfminer.pdfpage import PDFPage
 from pdfminer.pdfparser import PDFParser
 from pymupdf import Document, Font
 
-from pdf2zh.converter import TranslateConverter
-from pdf2zh.doclayout import OnnxModel
-from pdf2zh.pdfinterp import PDFPageInterpreterEx
+import os
+import sys
 
-from pdf2zh.config import ConfigManager
+# 添加当前目录到Python路径，以便导入模块
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+from converter import TranslateConverter
+from doclayout import OnnxModel
+from pdfinterp import PDFPageInterpreterEx
+from config import ConfigManager
 from babeldoc.assets.assets import get_font_and_metadata
 
 NOTO_NAME = "noto"

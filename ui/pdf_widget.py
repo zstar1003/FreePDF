@@ -1,13 +1,13 @@
 """PDF显示组件"""
 
-from PyQt6.QtWidgets import QWidget, QApplication
 from PyQt6.QtCore import pyqtSignal, QTimer, QRect
 from PyQt6.QtGui import QPainter, QPen, QColor, QFont
 from PyQt6.QtCore import Qt
-
+from PyQt6.QtWidgets import QWidget, QApplication, QScrollArea, QLabel, QVBoxLayout
 from core.pdf_document import PageCache
 from core.render_thread import PageRenderThread
 from core.text_selection import TextSelection
+
 from utils.constants import *
 
 
@@ -406,3 +406,169 @@ class VirtualPDFWidget(QWidget):
         """析构函数"""
         if not self._is_shutting_down:
             self.cleanup_threads() 
+
+
+
+class PDFWidget(QWidget):
+    """PDF显示组件包装器"""
+    text_selected = pyqtSignal(str)
+    page_changed = pyqtSignal(int)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.doc = None
+        self.zoom_factor = DEFAULT_ZOOM
+        
+        # 创建布局
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 创建滚动区域
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(False)
+        self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: #f5f5f5;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #f0f0f0;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #c0c0c0;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #a0a0a0;
+            }
+        """)
+        
+        # 创建PDF显示组件
+        self.pdf_display = VirtualPDFWidget()
+        
+        # 占位符
+        self.placeholder = QLabel(
+            "请打开PDF文件\n\n功能特点：\n• 连续滚动浏览\n• 虚拟渲染技术\n• 精确文本选择\n• Ctrl+滚轮缩放"
+        )
+        self.placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.placeholder.setStyleSheet("""
+            QLabel { 
+                background: #f8f9fa; 
+                padding: 50px; 
+                font-size: 16px; 
+                color: #666;
+                border: 2px dashed #ddd;
+                border-radius: 10px;
+                margin: 20px;
+            }
+        """)
+        
+        self.scroll_area.setWidget(self.placeholder)
+        layout.addWidget(self.scroll_area)
+        
+        # 连接信号
+        self.pdf_display.text_selected.connect(self.text_selected.emit)
+        self.pdf_display.page_changed.connect(self.page_changed.emit)
+        
+        # 绑定滚动事件
+        self.scroll_area.verticalScrollBar().valueChanged.connect(self._on_scroll)
+        self.scroll_area.wheelEvent = self._wheel_event
+        
+    def load_pdf(self, file_path):
+        """加载PDF文件"""
+        try:
+            import fitz
+            
+            # 加载文档
+            doc = fitz.open(file_path)
+            if not doc or doc.page_count == 0:
+                return False
+                
+            self.doc = doc
+            
+            # 创建PDF文档对象
+            from core.pdf_document import PDFDocument
+            pdf_doc = PDFDocument()
+            success, message = pdf_doc.load(file_path)
+            
+            if success:
+                # 设置到显示组件
+                self.pdf_display.set_document(pdf_doc, self.zoom_factor)
+                self.scroll_area.setWidget(self.pdf_display)
+                
+                # 触发初始渲染
+                QApplication.processEvents()
+                self._on_scroll(0)
+                
+                return True
+            else:
+                return False
+                
+        except Exception as e:
+            print(f"加载PDF失败: {e}")
+            return False
+            
+    def set_zoom(self, zoom_factor):
+        """设置缩放"""
+        if not self.doc:
+            return
+            
+        old_scroll_ratio = self._get_scroll_ratio()
+        self.zoom_factor = zoom_factor
+        
+        # 重新设置文档
+        if hasattr(self.pdf_display, 'pdf_doc') and self.pdf_display.pdf_doc:
+            self.pdf_display.set_document(self.pdf_display.pdf_doc, zoom_factor)
+            
+            # 恢复滚动位置
+            QTimer.singleShot(100, lambda: self._restore_scroll_position(old_scroll_ratio))
+            
+    def _get_scroll_ratio(self):
+        """获取滚动比例"""
+        scrollbar = self.scroll_area.verticalScrollBar()
+        if scrollbar.maximum() > 0:
+            return scrollbar.value() / scrollbar.maximum()
+        return 0
+        
+    def _restore_scroll_position(self, scroll_ratio):
+        """恢复滚动位置"""
+        scrollbar = self.scroll_area.verticalScrollBar()
+        if scrollbar.maximum() > 0:
+            new_value = int(scroll_ratio * scrollbar.maximum())
+            scrollbar.setValue(new_value)
+            
+    def _on_scroll(self, value):
+        """滚动事件"""
+        if hasattr(self.pdf_display, 'pdf_doc') and self.pdf_display.pdf_doc:
+            viewport_height = self.scroll_area.viewport().height()
+            self.pdf_display.update_viewport(value, viewport_height)
+            
+    def _wheel_event(self, event):
+        """滚轮事件"""
+        modifiers = QApplication.keyboardModifiers()
+        
+        if modifiers == Qt.KeyboardModifier.ControlModifier:
+            # Ctrl+滚轮缩放
+            delta = event.angleDelta().y()
+            if delta > 0:
+                new_zoom = min(self.zoom_factor * ZOOM_STEP, MAX_ZOOM)
+            else:
+                new_zoom = max(self.zoom_factor / ZOOM_STEP, MIN_ZOOM)
+            self.set_zoom(new_zoom)
+        else:
+            # 正常滚动
+            QScrollArea.wheelEvent(self.scroll_area, event)
+            
+    def cleanup(self):
+        """清理资源"""
+        if hasattr(self, 'pdf_display'):
+            self.pdf_display.cleanup_threads()
+            
+        if self.doc:
+            self.doc.close()
+            self.doc = None

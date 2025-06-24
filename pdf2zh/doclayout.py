@@ -19,7 +19,7 @@ except ImportError as e:
 
 from huggingface_hub import hf_hub_download
 
-from pdf2zh.config import ConfigManager
+from config import ConfigManager
 
 
 class DocLayoutModel(abc.ABC):

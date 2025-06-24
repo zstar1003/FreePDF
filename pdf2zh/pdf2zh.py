@@ -11,12 +11,20 @@ import sys
 from string import Template
 from typing import List, Optional
 
-from pdf2zh import __version__, log
-from pdf2zh.high_level import translate, download_remote_fonts
-from pdf2zh.doclayout import OnnxModel, ModelInstance
+# 避免循环导入，直接设置版本号
+__version__ = "1.9.10"
+log = logging.getLogger(__name__)
 import os
+import sys
 
-from pdf2zh.config import ConfigManager
+# 添加当前目录到Python路径，以便导入模块
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+from high_level import translate, download_remote_fonts
+from doclayout import OnnxModel, ModelInstance
+from config import ConfigManager
 from babeldoc.translation_config import TranslationConfig as YadtConfig
 from babeldoc.high_level import async_translate as yadt_translate
 from babeldoc.high_level import init as yadt_init
@@ -272,7 +280,7 @@ def main(args: Optional[List[str]] = None) -> int:
         ModelInstance.value = OnnxModel.load_available()
 
     if parsed_args.interactive:
-        from pdf2zh.gui import setup_gui
+        from gui import setup_gui
 
         if parsed_args.serverport:
             setup_gui(
@@ -283,13 +291,13 @@ def main(args: Optional[List[str]] = None) -> int:
         return 0
 
     if parsed_args.flask:
-        from pdf2zh.backend import flask_app
+        from backend import flask_app
 
         flask_app.run(port=11008)
         return 0
 
     if parsed_args.celery:
-        from pdf2zh.backend import celery_app
+        from backend import celery_app
 
         celery_app.start(argv=sys.argv[2:])
         return 0
@@ -304,7 +312,7 @@ def main(args: Optional[List[str]] = None) -> int:
 
     if parsed_args.mcp:
         logging.getLogger("mcp").setLevel(logging.ERROR)
-        from pdf2zh.mcp_server import create_mcp_app, create_starlette_app
+        from mcp_server import create_mcp_app, create_starlette_app
 
         mcp = create_mcp_app()
         if parsed_args.sse:
@@ -360,7 +368,7 @@ def yadt_main(parsed_args) -> int:
         except Exception:
             raise ValueError("prompt error.")
 
-    from pdf2zh.translator import (
+            from translator import (
         AzureOpenAITranslator,
         GoogleTranslator,
         BingTranslator,

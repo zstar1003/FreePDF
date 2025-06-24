@@ -15,7 +15,7 @@ from pdfminer.utils import apply_matrix_pt, mult_matrix
 from pymupdf import Font
 from tenacity import retry, wait_fixed
 
-from pdf2zh.translator import (
+from translator import (
     AnythingLLMTranslator,
     ArgosTranslator,
     AzureOpenAITranslator,
