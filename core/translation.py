@@ -1,20 +1,23 @@
 """PDF翻译处理模块"""
 
 import os
-import sys
-import tempfile
 import traceback
-import subprocess
-import json
-from PyQt6.QtCore import QThread, pyqtSignal, QObject
-from utils.constants import *
+
+from PyQt6.QtCore import QObject, QThread, pyqtSignal
+
+from utils.constants import (
+    DEFAULT_LANG_IN,
+    DEFAULT_LANG_OUT,
+    DEFAULT_SERVICE,
+    DEFAULT_THREADS,
+)
 
 
 class TranslationThread(QThread):
     """PDF翻译线程"""
-    translation_progress = pyqtSignal(str)  # 进度信息
-    translation_completed = pyqtSignal(str)  # 翻译完成，传递翻译后文件路径
-    translation_failed = pyqtSignal(str)  # 翻译失败，传递错误信息
+    translation_progress = pyqtSignal(str)
+    translation_completed = pyqtSignal(str)
+    translation_failed = pyqtSignal(str)
     
     def __init__(self, input_file, lang_in=DEFAULT_LANG_IN, lang_out=DEFAULT_LANG_OUT, 
                  service=DEFAULT_SERVICE, threads=DEFAULT_THREADS, parent=None):
@@ -45,10 +48,45 @@ class TranslationThread(QThread):
             
             print(f"开始翻译文件: {self.input_file}")
             
+            # 在这里才导入pdf2zh模块（延迟导入）
+            try:
+                print("正在导入pdf2zh模块...")
+                from pdf2zh import translate
+                from pdf2zh.doclayout import OnnxModel
+                print("pdf2zh模块导入成功")
+                
+            except ImportError as e:
+                error_msg = f"导入pdf2zh模块失败: {str(e)}\n请检查依赖安装是否完整"
+                print(error_msg)
+                self.translation_failed.emit(error_msg)
+                return
+            except Exception as e:
+                error_msg = f"导入pdf2zh模块时发生错误: {str(e)}"
+                print(error_msg)
+                self.translation_failed.emit(error_msg)
+                return
+            
             if self._stop_requested:
                 return
             
             self.translation_progress.emit("正在加载AI模型...")
+            
+            try:
+                print("开始加载OnnxModel...")
+                model = OnnxModel.load_available()
+                print(f"模型加载结果: {model}")
+                
+                if model is None:
+                    self.translation_failed.emit("无法加载AI模型，请检查模型文件")
+                    return
+                    
+                print("AI模型加载成功")
+                
+            except Exception as e:
+                error_msg = f"加载AI模型失败: {str(e)}\n{traceback.format_exc()}"
+                print(error_msg)
+                self.translation_failed.emit(error_msg)
+                return
             
             if self._stop_requested:
                 return
@@ -56,81 +94,38 @@ class TranslationThread(QThread):
             self.translation_progress.emit("正在翻译PDF文档，请稍候...")
             
             try:
-                # 使用subprocess调用pdf2zh模块
-                current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                pdf2zh_script = os.path.join(current_dir, 'pdf2zh', 'pdf2zh.py')
+                # 设置翻译参数（参考test_api.py）
+                params = {
+                    "model": model,
+                    "lang_in": self.lang_in,
+                    "lang_out": self.lang_out,
+                    "service": self.service,
+                    "thread": self.threads,
+                }
                 
-                # 构建命令行参数
-                python_exe = sys.executable
-                cmd = [
-                    python_exe, pdf2zh_script,
-                    self.input_file,
-                    '--lang-in', self.lang_in,
-                    '--lang-out', self.lang_out, 
-                    '--service', self.service,
-                    '--thread', str(self.threads)
-                ]
+                print(f"翻译参数: {params}")
+                print(f"翻译文件: {self.input_file}")
                 
-                print(f"执行命令: {' '.join(cmd)}")
+                # 执行翻译（参考test_api.py）
+                result = translate(files=[self.input_file], **params)
+                print(f"翻译结果: {result}")
                 
-                # 执行翻译命令
-                process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    cwd=current_dir
-                )
-                
-                # 等待完成
-                stdout, stderr = process.communicate()
-                
-                if self._stop_requested:
-                    return
-                
-                if process.returncode == 0:
-                    # 翻译成功，查找输出文件
-                    base_name = os.path.splitext(self.input_file)[0]
-                    base_filename = os.path.basename(base_name)
-                    current_dir = os.path.dirname(os.path.abspath(self.input_file)) or '.'
+                if result and len(result) > 0:
+                    file_mono, file_dual = result[0]
+                    print(f"翻译输出文件: mono={file_mono}, dual={file_dual}")
                     
-                    possible_outputs = [
-                        os.path.join(current_dir, f"{base_filename}-dual.pdf"),
-                        os.path.join(current_dir, f"{base_filename}-mono.pdf"),
-                        f"{base_name}-dual.pdf",
-                        f"{base_name}-mono.pdf",
-                        f"{base_name}-zh.pdf", 
-                        f"{base_name}_translated.pdf"
-                    ]
-                    
-                    output_file = None
-                    for possible_file in possible_outputs:
-                        if os.path.exists(possible_file):
-                            output_file = possible_file
-                            print(f"找到输出文件: {possible_file}")
-                            break
-                    
-                    if output_file:
-                        print(f"翻译完成: {output_file}")
-                        self.translation_completed.emit(os.path.abspath(output_file))
+                    if self._stop_requested:
+                        return
+ 
+                    if file_mono and os.path.exists(file_mono):
+                        print(f"使用单语版本: {file_mono}")
+                        self.translation_completed.emit(os.path.abspath(file_mono))
                     else:
-                        # 检查当前目录是否有新生成的PDF文件
-                        try:
-                            current_files = [f for f in os.listdir('.') if f.endswith('.pdf') and f != os.path.basename(self.input_file)]
-                            current_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-                            
-                            if current_files:
-                                output_file = current_files[0]
-                                print(f"找到最新的PDF文件: {output_file}")
-                                self.translation_completed.emit(os.path.abspath(output_file))
-                            else:
-                                self.translation_failed.emit("翻译完成但无法找到结果文件")
-                        except Exception as e:
-                            self.translation_failed.emit(f"查找翻译结果文件时出错: {str(e)}")
+                        error_msg = "翻译完成但无法找到结果文件"
+                        print(error_msg)
+                        self.translation_failed.emit(error_msg)
                 else:
-                    error_msg = f"翻译失败 (返回码: {process.returncode})\n标准输出: {stdout}\n错误输出: {stderr}"
-                    print(error_msg)
-                    self.translation_failed.emit(error_msg)
+                    self.translation_failed.emit("翻译结果为空")
                     
             except Exception as e:
                 error_msg = f"翻译过程中出错: {str(e)}\n{traceback.format_exc()}"
@@ -149,7 +144,7 @@ class TranslationManager(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_thread = None
-        self.translated_files = {}  # 原文件路径 -> 翻译文件路径
+        self.translated_files = {}
         
     def start_translation(self, input_file, progress_callback=None, 
                          completed_callback=None, failed_callback=None):

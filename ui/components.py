@@ -1,9 +1,10 @@
 """UI组件模块"""
 
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QProgressBar
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QFont, QMovie
 import math
+
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QColor, QPainter
+from PyQt6.QtWidgets import QLabel, QProgressBar, QVBoxLayout, QWidget
 
 
 class LoadingWidget(QWidget):

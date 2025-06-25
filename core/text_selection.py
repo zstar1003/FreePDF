@@ -1,8 +1,7 @@
 """文本选择功能"""
 
-from PyQt6.QtCore import QPoint, QRect
+from PyQt6.QtCore import QPoint, QRect, Qt
 from PyQt6.QtGui import QCursor
-from PyQt6.QtCore import Qt
 
 
 class TextSelection:

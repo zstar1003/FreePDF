@@ -1,9 +1,8 @@
 """PDF页面渲染线程"""
 
 import fitz
-from PyQt6.QtCore import QThread, pyqtSignal, QMutex, QMutexLocker
-from PyQt6.QtGui import QPixmap, QImage
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QMutex, QMutexLocker, Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QImage, QPixmap
 
 
 class PageRenderThread(QThread):

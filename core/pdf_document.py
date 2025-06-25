@@ -1,7 +1,9 @@
 """PDF文档管理"""
 
-import fitz
 from collections import OrderedDict
+
+import fitz
+
 from utils.constants import MAX_CACHE_SIZE
 
 

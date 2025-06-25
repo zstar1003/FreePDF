@@ -1,18 +1,32 @@
 """主窗口模块"""
 
-from PyQt6.QtWidgets import (
-    QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QMenuBar, 
-    QStatusBar, QSpinBox, QLabel, QPushButton, QFileDialog, 
-    QMessageBox, QSplitter, QFrame
-)
-from PyQt6.QtCore import Qt, pyqtSlot
-from PyQt6.QtGui import QAction
 import os
 
-from ui.pdf_widget import PDFWidget
-from ui.components import LoadingWidget, SyncScrollArea, StatusLabel
+from PyQt6.QtCore import Qt, pyqtSlot
+from PyQt6.QtGui import QAction
+from PyQt6.QtWidgets import (
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QSplitter,
+    QStatusBar,
+    QVBoxLayout,
+    QWidget,
+)
+
 from core.translation import TranslationManager
-from utils.constants import *
+from ui.components import LoadingWidget, StatusLabel, SyncScrollArea
+from ui.pdf_widget import PDFWidget
+from utils.constants import (
+    DEFAULT_ZOOM,
+    MAX_ZOOM,
+    MIN_ZOOM,
+)
 
 
 class MainWindow(QMainWindow):
@@ -20,8 +34,9 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PDF 双语预览器")
+        self.setWindowTitle("FreePDF")
         self.setGeometry(100, 100, 1600, 900)
+        self.showMaximized()
         
         # 初始化组件
         self.current_file = None

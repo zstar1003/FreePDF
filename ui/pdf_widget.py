@@ -1,14 +1,28 @@
 """PDF显示组件"""
 
-from PyQt6.QtCore import pyqtSignal, QTimer, QRect
-from PyQt6.QtGui import QPainter, QPen, QColor, QFont
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QWidget, QApplication, QScrollArea, QLabel, QVBoxLayout
+from PyQt6.QtCore import QRect, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor, QFont, QPainter, QPen
+from PyQt6.QtWidgets import QApplication, QLabel, QScrollArea, QVBoxLayout, QWidget
+
 from core.pdf_document import PageCache
 from core.render_thread import PageRenderThread
 from core.text_selection import TextSelection
-
-from utils.constants import *
+from utils.constants import (
+    BORDER_COLOR,
+    DEFAULT_DPI,
+    DEFAULT_ZOOM,
+    HIGHLIGHT_COLOR,
+    MAX_PAGE_WIDTH,
+    MAX_ZOOM,
+    MIN_ZOOM,
+    PAGE_BORDER_COLOR,
+    PAGE_SPACING,
+    PLACEHOLDER_COLOR,
+    PRELOAD_DELAY,
+    PRELOAD_DISTANCE,
+    VIEWPORT_BUFFER,
+    ZOOM_STEP,
+)
 
 
 class VirtualPDFWidget(QWidget):
