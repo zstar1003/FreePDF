@@ -141,6 +141,9 @@ class SmoothPDFView(QGraphicsView):
         self.auto_fit_zoom = DEFAULT_ZOOM
         self.container_width = 800  # 默认容器宽度
         
+        # 全局缩放回调（由主窗口设置）
+        self.zoom_requested = None
+        
         # 绑定滚动事件
         self.verticalScrollBar().valueChanged.connect(self._on_scroll)
         
@@ -265,7 +268,16 @@ class SmoothPDFView(QGraphicsView):
             print(f"自适应缩放: {fit_zoom:.2f}, 页面宽度: {page_width:.1f}, 容器宽度: {self.container_width}")
         
     def set_zoom(self, zoom_factor):
-        """设置缩放（即时变换）"""
+        """设置缩放（即时变换）- 外部调用"""
+        if hasattr(self, 'zoom_requested') and self.zoom_requested:
+            # 如果有全局缩放管理器，转发给它处理
+            self.zoom_requested(zoom_factor)
+        else:
+            # 否则使用内部处理
+            self.set_zoom_internal(zoom_factor)
+            
+    def set_zoom_internal(self, zoom_factor):
+        """内部缩放设置（不经过全局管理器）"""
         if not self.pdf_doc:
             return
             
@@ -467,11 +479,17 @@ class SmoothPDFView(QGraphicsView):
         modifiers = QApplication.keyboardModifiers()
         
         if modifiers == Qt.KeyboardModifier.ControlModifier:
-            # Ctrl+滚轮缩放
+            # Ctrl+滚轮缩放 - 通过全局缩放管理器
             delta = event.angleDelta().y()
             zoom_factor = ZOOM_STEP if delta > 0 else 1/ZOOM_STEP
             new_zoom = self.current_zoom * zoom_factor
-            self.set_zoom(new_zoom)
+            
+            # 使用全局缩放管理
+            if hasattr(self, 'zoom_requested') and self.zoom_requested:
+                self.zoom_requested(new_zoom)
+            else:
+                self.set_zoom_internal(new_zoom)
+                
             event.accept()
         else:
             # 正常滚动

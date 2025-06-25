@@ -257,9 +257,47 @@ class MainWindow(QMainWindow):
         self.left_pdf_widget.page_changed.connect(self.on_page_changed)
         self.left_pdf_widget.text_selected.connect(self.on_text_selected)
         
+        # 设置全局缩放管理
+        self._setup_global_zoom_management()
+        
         # 翻译管理器信号
         self.translation_manager.current_thread = None
         
+    def _setup_global_zoom_management(self):
+        """设置全局缩放管理"""
+        # 连接PDF视图的缩放回调
+        if hasattr(self.left_pdf_widget, 'pdf_view'):
+            self.left_pdf_widget.pdf_view.zoom_requested = self.handle_zoom_request
+            
+        if hasattr(self.right_pdf_widget, 'pdf_view'):
+            self.right_pdf_widget.pdf_view.zoom_requested = self.handle_zoom_request
+
+    def handle_zoom_request(self, zoom_factor):
+        """处理来自PDF视图的缩放请求"""
+        # 限制缩放范围
+        zoom_factor = max(MIN_ZOOM, min(zoom_factor, MAX_ZOOM))
+        
+        # 更新UI控制
+        zoom_percentage = int(zoom_factor * 100)
+        
+        # 避免循环触发
+        self.zoom_spinbox.blockSignals(True)
+        self.zoom_spinbox.setValue(zoom_percentage)
+        self.zoom_spinbox.blockSignals(False)
+        
+        # 应用到两个PDF视图
+        self.apply_zoom_to_both(zoom_factor)
+        
+    def apply_zoom_to_both(self, zoom_factor):
+        """应用缩放到两个PDF视图"""
+        # 应用到左侧
+        if hasattr(self.left_pdf_widget, 'pdf_view'):
+            self.left_pdf_widget.pdf_view.set_zoom_internal(zoom_factor)
+            
+        # 应用到右侧
+        if hasattr(self.right_pdf_widget, 'pdf_view') and self.right_pdf_widget.doc:
+            self.right_pdf_widget.pdf_view.set_zoom_internal(zoom_factor)
+
     @pyqtSlot()
     def open_file(self):
         """打开PDF文件"""
@@ -370,9 +408,13 @@ class MainWindow(QMainWindow):
                 # 隐藏加载动画
                 self.loading_widget.hide()
                 
-                # 同步缩放
-                zoom_factor = self.left_pdf_widget.zoom_factor
-                self.right_pdf_widget.set_zoom(zoom_factor)
+                # 设置全局缩放管理
+                if hasattr(self.right_pdf_widget, 'pdf_view'):
+                    self.right_pdf_widget.pdf_view.zoom_requested = self.handle_zoom_request
+                
+                # 同步缩放到当前缩放值
+                current_zoom = self.zoom_spinbox.value() / 100.0
+                self.apply_zoom_to_both(current_zoom)
                 
                 # 启用同步滚动
                 self.sync_scroll.set_enabled(True)
@@ -440,25 +482,25 @@ class MainWindow(QMainWindow):
             if hasattr(pdf_view, '_calculate_auto_fit_zoom') and hasattr(pdf_view, 'auto_fit_zoom'):
                 pdf_view._calculate_auto_fit_zoom()
                 
-                # 更新UI显示
-                zoom_percentage = int(pdf_view.auto_fit_zoom * 100)
-                self.zoom_spinbox.setValue(zoom_percentage)
-                
-                # 应用缩放到两个PDF视图
+                # 更新UI显示和应用缩放
                 zoom_factor = pdf_view.auto_fit_zoom
-                self.left_pdf_widget.set_zoom(zoom_factor)
-                if hasattr(self.right_pdf_widget, 'pdf_view') and self.right_pdf_widget.doc:
-                    self.right_pdf_widget.set_zoom(zoom_factor)
+                zoom_percentage = int(zoom_factor * 100)
+                
+                # 避免循环触发
+                self.zoom_spinbox.blockSignals(True)
+                self.zoom_spinbox.setValue(zoom_percentage)
+                self.zoom_spinbox.blockSignals(False)
+                
+                # 应用到两个PDF视图
+                self.apply_zoom_to_both(zoom_factor)
         
     @pyqtSlot(int)
     def on_zoom_changed(self, value):
         """缩放改变"""
         zoom_factor = value / 100.0
         
-        # 直接设置缩放，pdf_widget内部已经有防抖动机制
-        self.left_pdf_widget.set_zoom(zoom_factor)
-        if self.right_pdf_widget.doc:
-            self.right_pdf_widget.set_zoom(zoom_factor)
+        # 使用统一的缩放应用方法
+        self.apply_zoom_to_both(zoom_factor)
             
     @pyqtSlot(int)
     def on_page_changed(self, page_num):
