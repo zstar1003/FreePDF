@@ -210,8 +210,8 @@ class SmoothPDFView(QGraphicsView):
             # 记录最大页面宽度
             max_page_width = max(max_page_width, display_width)
             
-            # 计算居中的x坐标，减少左右边距
-            center_x = max(1, (container_width - display_width) / 2)  # 最小边距改为1
+            # 计算居中的x坐标，确保页面在容器内居中
+            center_x = max(0, (container_width - display_width) / 2)
             
             # 创建页面图形项（先用占位符）
             page_item = PageGraphicsItem(page_num)
@@ -223,14 +223,15 @@ class SmoothPDFView(QGraphicsView):
             self.page_positions.append(current_y)
             self.page_heights.append(display_height)
             
-            # 只在页面间添加最小间距，第一页不加
+            # 页面间距处理
             current_y += display_height
-            if page_num < self.pdf_doc.total_pages - 1:  # 最后一页后不加间距
+            if page_num < self.pdf_doc.total_pages - 1 and PAGE_SPACING > 0:
                 current_y += PAGE_SPACING
         
-        # 设置场景大小，减少额外空间
-        scene_width = max(container_width, max_page_width + 5) if self.page_items else container_width  # 进一步减少额外宽度
-        self.scene.setSceneRect(0, 0, scene_width, current_y)  # 底部不留额外空间
+        # 设置场景大小，确保不超出容器宽度
+        # 在自适应缩放下，页面应该正好适合容器，因此场景宽度应该等于容器宽度
+        scene_width = container_width
+        self.scene.setSceneRect(0, 0, scene_width, current_y)
         
         # 重新居中所有页面
         self._center_all_pages()
@@ -250,7 +251,7 @@ class SmoothPDFView(QGraphicsView):
             
             if page_width > 0:
                 # 计算新的居中x坐标，保持最小边距一致
-                center_x = max(1, (container_width - page_width) / 2)  # 最小边距改为1
+                center_x = max(0, (container_width - page_width) / 2)
                 page_item.setPos(center_x, current_pos.y())
     
     def _calculate_auto_fit_zoom(self):
@@ -258,8 +259,8 @@ class SmoothPDFView(QGraphicsView):
         if not self.pdf_doc or not self.pdf_doc.doc:
             return
         
-        # 更新容器宽度，减少边距以充分利用空间
-        self.container_width = self.viewport().width() - 10  # 减少边距从40到10
+        # 更新容器宽度，确保页面完全适合容器
+        self.container_width = self.viewport().width()
         
         # 获取第一页尺寸作为参考
         first_page_rect = self.pdf_doc.get_page_rect(0)
@@ -457,7 +458,7 @@ class SmoothPDFView(QGraphicsView):
         
         if page_width > 0:
             container_width = self.viewport().width()
-            center_x = max(1, (container_width - page_width) / 2)  # 最小边距改为1
+            center_x = max(0, (container_width - page_width) / 2)
             page_item.setPos(center_x, current_pos.y())
          
     def _on_thread_finished(self, page_num):
@@ -589,16 +590,16 @@ class SmoothPDFView(QGraphicsView):
         """窗口大小变化事件"""
         super().resizeEvent(event)
         
-        # 如果有文档加载，重新计算自适应缩放和居中
+        # 如果有文档加载，重新计算自适应缩放和重新布局
         if self.pdf_doc and hasattr(self, 'auto_fit_zoom'):
             old_width = self.container_width
             self._calculate_auto_fit_zoom()
             
-            # 重新居中所有页面
-            self._center_all_pages()
+            # 重新设置整个页面布局（包括场景大小）
+            self._setup_pages()
             
             # 如果容器宽度显著变化，重新渲染以获得最佳显示效果
-            if abs(self.container_width - old_width) > 20:  # 降低重新渲染的阈值
+            if abs(self.container_width - old_width) > 20:
                 self._render_visible_pages()
 
 
