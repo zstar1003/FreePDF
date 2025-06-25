@@ -430,10 +430,18 @@ class SmoothPDFView(QGraphicsView):
         
         # 更新页面图形项
         page_item = self.page_items[page_num]
+        old_height = self.page_heights[page_num] if page_num < len(self.page_heights) else 0
+        
         page_item.set_pixmap(pixmap)
         
-        # 重新居中该页面
-        self._center_page(page_item)
+        # 检查实际渲染的页面高度是否与预期不同
+        actual_height = pixmap.height()
+        if abs(actual_height - old_height) > 1:  # 高度差超过1像素则需要重新布局
+            print(f"页面 {page_num} 高度调整: {old_height} -> {actual_height}")
+            self._update_page_layout_from(page_num)
+        else:
+            # 只需要重新居中该页面
+            self._center_page(page_item)
         
         # 更新文本选择
         self._update_visible_words()
@@ -446,11 +454,63 @@ class SmoothPDFView(QGraphicsView):
         # 只有当没有高质量版本时才显示预览
         if not self.page_cache.has_page(page_num):
             page_item = self.page_items[page_num]
+            old_height = self.page_heights[page_num] if page_num < len(self.page_heights) else 0
+            
             page_item.set_pixmap(pixmap)
             
-            # 重新居中该页面
-            self._center_page(page_item)
+            # 检查实际渲染的页面高度是否与预期不同
+            actual_height = pixmap.height()
+            if abs(actual_height - old_height) > 1:  # 高度差超过1像素则需要重新布局
+                self._update_page_layout_from(page_num)
+            else:
+                # 只需要重新居中该页面
+                self._center_page(page_item)
         
+    def _update_page_layout_from(self, start_page_num):
+        """从指定页面开始重新计算和更新页面布局"""
+        if not self.page_items or start_page_num >= len(self.page_items):
+            return
+            
+        # 更新指定页面的高度
+        page_item = self.page_items[start_page_num]
+        if page_item.pixmap():
+            self.page_heights[start_page_num] = page_item.pixmap().height()
+        
+        # 重新计算从该页面开始的所有页面位置
+        if start_page_num == 0:
+            current_y = 0
+        else:
+            # 从前一页的底部开始
+            prev_page_bottom = self.page_positions[start_page_num - 1] + self.page_heights[start_page_num - 1]
+            current_y = prev_page_bottom + (PAGE_SPACING if PAGE_SPACING > 0 else 0)
+        
+        container_width = self.viewport().width()
+        
+        # 更新从start_page_num开始的所有页面位置
+        for i in range(start_page_num, len(self.page_items)):
+            page_item = self.page_items[i]
+            
+            # 更新页面位置
+            self.page_positions[i] = current_y
+            
+            # 重新居中页面
+            if page_item.pixmap():
+                page_width = page_item.pixmap().width()
+                center_x = max(0, (container_width - page_width) / 2)
+                page_item.setPos(center_x, current_y)
+                
+                # 更新页面高度（如果已渲染）
+                self.page_heights[i] = page_item.pixmap().height()
+            
+            # 计算下一页的y位置
+            current_y += self.page_heights[i]
+            if i < len(self.page_items) - 1 and PAGE_SPACING > 0:
+                current_y += PAGE_SPACING
+        
+        # 更新场景大小
+        scene_width = container_width
+        self.scene.setSceneRect(0, 0, scene_width, current_y)
+    
     def _center_page(self, page_item):
         """居中单个页面"""
         current_pos = page_item.pos()
