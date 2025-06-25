@@ -3,7 +3,7 @@
 import os
 
 from PyQt6.QtCore import Qt, pyqtSlot
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -35,6 +35,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("FreePDF")
+        self.setWindowIcon(QIcon("ui/logo/logo.ico"))
         self.setGeometry(100, 100, 1600, 900)
         self.showMaximized()
         
@@ -150,10 +151,14 @@ class MainWindow(QMainWindow):
         self.right_pdf_widget = PDFWidget()
         right_layout.addWidget(self.right_pdf_widget)
         
-        # 右侧加载动画（初始隐藏）
+        # 创建加载动画，但不添加到布局中！
         self.loading_widget = LoadingWidget("等待上传PDF文件...")
-        right_layout.addWidget(self.loading_widget)
+        # 设置parent为right_frame，但不添加到layout
+        self.loading_widget.setParent(right_frame)
         self.loading_widget.hide()
+        
+        # 保存right_frame的引用，用于后续定位
+        self.right_frame = right_frame
         
         # 添加到分割器
         self.splitter.addWidget(left_frame)
@@ -252,10 +257,8 @@ class MainWindow(QMainWindow):
                     total_pages = self.left_pdf_widget.doc.page_count
                     self.page_info_label.setText(f"共 {total_pages} 页")
                 
-                # 显示右侧加载动画
-                self.right_pdf_widget.hide()
-                self.loading_widget.show()
-                self.loading_widget.set_message("正在准备翻译...")
+                # 显示加载动画（叠加在PDF widget上）
+                self.show_loading_centered("正在准备翻译...")
                 
                 # 开始翻译
                 self.start_translation(file_path)
@@ -265,7 +268,36 @@ class MainWindow(QMainWindow):
                 
         except Exception as e:
             QMessageBox.critical(self, "错误", f"加载文件时出错: {str(e)}")
+
+    def show_loading_centered(self, message):
+        """显示居中的加载动画"""
+        self.loading_widget.set_message(message)
+        self.loading_widget.show()
+        
+        # 使用QTimer延迟执行居中定位，确保布局已完成
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(10, self.center_loading_widget)
+
+    def center_loading_widget(self):
+        """将loading widget居中在PDF widget区域"""
+        try:
+            # 获取PDF widget的几何信息
+            pdf_widget_rect = self.right_pdf_widget.geometry()
             
+            # 计算居中位置（相对于right_frame）
+            x = pdf_widget_rect.x() + (pdf_widget_rect.width() - self.loading_widget.width()) // 2
+            y = pdf_widget_rect.y() + (pdf_widget_rect.height() - self.loading_widget.height()) // 2
+            
+            self.loading_widget.move(x, y)
+            self.loading_widget.raise_()  # 确保在最上层
+            
+        except Exception as e:
+            print(f"居中loading widget时出错: {e}")
+
+    def hide_loading(self):
+        """隐藏加载动画"""
+        self.loading_widget.hide()
+
     def start_translation(self, file_path):
         """开始翻译PDF"""
         try:
@@ -301,9 +333,8 @@ class MainWindow(QMainWindow):
             
             # 加载翻译后的文件到右侧
             if self.right_pdf_widget.load_pdf(translated_file):
-                # 隐藏加载动画，显示右侧预览器
+                # 隐藏加载动画
                 self.loading_widget.hide()
-                self.right_pdf_widget.show()
                 
                 # 同步缩放
                 zoom_factor = self.left_pdf_widget.zoom_factor
@@ -391,4 +422,12 @@ class MainWindow(QMainWindow):
         self.left_pdf_widget.cleanup()
         self.right_pdf_widget.cleanup()
         
-        super().closeEvent(event) 
+        super().closeEvent(event)
+
+    def resizeEvent(self, event):
+        """窗口大小改变时重新调整loading widget位置"""
+        super().resizeEvent(event)
+        if hasattr(self, 'loading_widget') and self.loading_widget.isVisible():
+            # 延迟执行居中，确保布局调整完成
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(50, self.center_loading_widget) 

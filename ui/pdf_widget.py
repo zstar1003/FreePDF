@@ -467,7 +467,7 @@ class PDFWidget(QWidget):
         
         # 占位符
         self.placeholder = QLabel(
-            "请打开PDF文件\n\n功能特点：\n• 连续滚动浏览\n• 虚拟渲染技术\n• 精确文本选择\n• Ctrl+滚轮缩放"
+            "请打开PDF文件\n\n 可通过 Ctrl+滚轮 控制缩放"
         )
         self.placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.placeholder.setStyleSheet("""
