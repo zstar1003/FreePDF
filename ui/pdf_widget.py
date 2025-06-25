@@ -20,14 +20,11 @@ from utils.constants import (
     DEFAULT_ZOOM,
     HIGH_QUALITY_DPI,
     MAX_PAGE_WIDTH,
-    MAX_ZOOM,
-    MIN_ZOOM,
     PAGE_SPACING,
     PLACEHOLDER_COLOR,
     PRELOAD_DELAY,
     PRELOAD_DISTANCE,
     VIEWPORT_BUFFER,
-    ZOOM_STEP,
 )
 
 
@@ -64,7 +61,7 @@ class PageGraphicsItem(QGraphicsPixmapItem):
 
 
 class SmoothPDFView(QGraphicsView):
-    """丝滑缩放的PDF视图"""
+    """PDF视图"""
     text_selected = pyqtSignal(str)
     page_changed = pyqtSignal(int)
     
@@ -116,8 +113,6 @@ class SmoothPDFView(QGraphicsView):
         # 缩放设置
         self.base_zoom = DEFAULT_ZOOM
         self.current_zoom = DEFAULT_ZOOM
-        self.min_zoom = MIN_ZOOM
-        self.max_zoom = MAX_ZOOM
         
         # 渲染管理
         self.render_threads = {}
@@ -140,9 +135,6 @@ class SmoothPDFView(QGraphicsView):
         # 自适应缩放相关
         self.auto_fit_zoom = DEFAULT_ZOOM
         self.container_width = 800  # 默认容器宽度
-        
-        # 全局缩放回调（由主窗口设置）
-        self.zoom_requested = None
         
         # 绑定滚动事件
         self.verticalScrollBar().valueChanged.connect(self._on_scroll)
@@ -175,6 +167,13 @@ class SmoothPDFView(QGraphicsView):
         if not self.pdf_doc or not self.pdf_doc.doc:
             return
             
+        # 保存旧的页面项（如果有的话）
+        old_page_items = {}
+        if self.page_items:
+            for i, item in enumerate(self.page_items):
+                if not item.is_placeholder and item.pixmap():
+                    old_page_items[i] = item.pixmap()
+        
         # 清除旧的页面项
         self.scene.clear()
         self.page_items = []
@@ -213,9 +212,42 @@ class SmoothPDFView(QGraphicsView):
             # 计算居中的x坐标，确保页面在容器内居中
             center_x = max(0, (container_width - display_width) / 2)
             
-            # 创建页面图形项（先用占位符）
+            # 创建页面图形项
             page_item = PageGraphicsItem(page_num)
-            page_item.set_placeholder(display_width, display_height)
+            
+            # 检查是否有缓存的页面内容
+            if self.page_cache.has_page(page_num):
+                cached_pixmap = self.page_cache.get_page(page_num)
+                if cached_pixmap and not cached_pixmap.isNull():
+                    # 检查缓存的像素图是否适合当前尺寸
+                    cached_width = cached_pixmap.width()
+                    size_diff = abs(cached_width - display_width) / display_width
+                    
+                    if size_diff < 0.1:  # 尺寸差异小于10%，直接使用
+                        page_item.set_pixmap(cached_pixmap)
+                        display_height = cached_pixmap.height()
+                    else:
+                        # 缩放缓存的像素图到合适尺寸
+                        scaled_pixmap = cached_pixmap.scaledToWidth(
+                            display_width, Qt.TransformationMode.SmoothTransformation
+                        )
+                        page_item.set_pixmap(scaled_pixmap)
+                        display_height = scaled_pixmap.height()
+                else:
+                    # 缓存无效，创建占位符
+                    page_item.set_placeholder(display_width, display_height)
+            elif page_num in old_page_items:
+                # 尝试使用旧的页面内容
+                old_pixmap = old_page_items[page_num]
+                scaled_pixmap = old_pixmap.scaledToWidth(
+                    display_width, Qt.TransformationMode.SmoothTransformation
+                )
+                page_item.set_pixmap(scaled_pixmap)
+                display_height = scaled_pixmap.height()
+            else:
+                # 创建占位符
+                page_item.set_placeholder(display_width, display_height)
+            
             page_item.setPos(center_x, current_y)
             
             self.scene.addItem(page_item)
@@ -271,70 +303,12 @@ class SmoothPDFView(QGraphicsView):
         page_width = first_page_rect.width
         if page_width > 0:
             fit_zoom = self.container_width / page_width
-            # 限制在合理范围内
-            fit_zoom = max(self.min_zoom, min(fit_zoom, self.max_zoom))
             
             self.auto_fit_zoom = fit_zoom
             self.base_zoom = fit_zoom
             self.current_zoom = fit_zoom
             
             print(f"自适应缩放: {fit_zoom:.2f}, 页面宽度: {page_width:.1f}, 容器宽度: {self.container_width}")
-        
-    def set_zoom(self, zoom_factor):
-        """设置缩放（即时变换）- 外部调用"""
-        if hasattr(self, 'zoom_requested') and self.zoom_requested:
-            # 如果有全局缩放管理器，转发给它处理
-            self.zoom_requested(zoom_factor)
-        else:
-            # 否则使用内部处理
-            self.set_zoom_internal(zoom_factor)
-            
-    def set_zoom_internal(self, zoom_factor):
-        """内部缩放设置（不经过全局管理器）"""
-        if not self.pdf_doc:
-            return
-            
-        # 限制缩放范围
-        zoom_factor = max(self.min_zoom, min(zoom_factor, self.max_zoom))
-        
-        if abs(zoom_factor - self.current_zoom) < 0.01:
-            return
-            
-        # 获取当前滚动位置作为百分比
-        old_scroll_ratio_x = 0
-        old_scroll_ratio_y = 0
-        
-        h_bar = self.horizontalScrollBar()
-        v_bar = self.verticalScrollBar()
-        
-        if h_bar.maximum() > 0:
-            old_scroll_ratio_x = h_bar.value() / h_bar.maximum()
-        if v_bar.maximum() > 0:
-            old_scroll_ratio_y = v_bar.value() / v_bar.maximum()
-            
-        # 更新缩放比例
-        self.current_zoom = zoom_factor
-        self.base_zoom = zoom_factor
-        
-        # 重新布局所有页面（这是关键！）
-        self._setup_pages()
-        
-        # 清除缓存并重新渲染可见页面
-        self.page_cache.clear()
-        self._render_visible_pages()
-        
-        # 恢复滚动位置
-        QTimer.singleShot(50, lambda: self._restore_scroll_position(old_scroll_ratio_x, old_scroll_ratio_y))
-        
-    def _restore_scroll_position(self, ratio_x, ratio_y):
-        """恢复滚动位置"""
-        h_bar = self.horizontalScrollBar()
-        v_bar = self.verticalScrollBar()
-        
-        if h_bar.maximum() > 0:
-            h_bar.setValue(int(ratio_x * h_bar.maximum()))
-        if v_bar.maximum() > 0:
-            v_bar.setValue(int(ratio_y * v_bar.maximum()))
         
     def _render_high_quality(self):
         """渲染高质量页面"""
@@ -380,7 +354,29 @@ class SmoothPDFView(QGraphicsView):
         visible_pages = self._get_visible_pages()
         
         for page_num in visible_pages:
-            if (not self.page_cache.has_page(page_num) and 
+            # 检查页面是否需要渲染
+            needs_render = False
+            
+            if page_num < len(self.page_items):
+                page_item = self.page_items[page_num]
+                # 如果是占位符，需要渲染
+                if page_item.is_placeholder:
+                    needs_render = True
+                # 如果没有缓存，也需要渲染
+                elif not self.page_cache.has_page(page_num):
+                    needs_render = True
+                # 如果缓存的尺寸与当前需要的尺寸差异较大，需要重新渲染
+                elif self.page_cache.has_page(page_num):
+                    cached_pixmap = self.page_cache.get_page(page_num)
+                    if cached_pixmap and not cached_pixmap.isNull() and page_item.pixmap():
+                        current_width = page_item.pixmap().width()
+                        cached_width = cached_pixmap.width()
+                        size_diff = abs(current_width - cached_width) / max(current_width, 1)
+                        # 如果尺寸差异超过20%，重新渲染
+                        if size_diff > 0.2:
+                            needs_render = True
+            
+            if (needs_render and 
                 page_num not in self.pending_renders and
                 not self._is_shutting_down):
                 self._render_page(page_num)
@@ -572,26 +568,30 @@ class SmoothPDFView(QGraphicsView):
         pass
         
     def wheelEvent(self, event):
-        """滚轮事件"""
-        modifiers = QApplication.keyboardModifiers()
+        """滚轮事件 - 仅支持正常滚动"""
+        # 只支持正常滚动，不支持缩放
+        super().wheelEvent(event)
+
+    def _render_placeholder_pages(self):
+        """渲染占位符页面"""
+        if self._is_shutting_down:
+            return
+            
+        # 找到所有占位符页面并渲染
+        for i, page_item in enumerate(self.page_items):
+            if page_item.is_placeholder and i not in self.pending_renders:
+                self._render_page(i, high_quality=True)
+
+    def _restore_scroll_position(self, ratio_x, ratio_y):
+        """恢复滚动位置"""
+        h_bar = self.horizontalScrollBar()
+        v_bar = self.verticalScrollBar()
         
-        if modifiers == Qt.KeyboardModifier.ControlModifier:
-            # Ctrl+滚轮缩放 - 通过全局缩放管理器
-            delta = event.angleDelta().y()
-            zoom_factor = ZOOM_STEP if delta > 0 else 1/ZOOM_STEP
-            new_zoom = self.current_zoom * zoom_factor
-            
-            # 使用全局缩放管理
-            if hasattr(self, 'zoom_requested') and self.zoom_requested:
-                self.zoom_requested(new_zoom)
-            else:
-                self.set_zoom_internal(new_zoom)
-                
-            event.accept()
-        else:
-            # 正常滚动
-            super().wheelEvent(event)
-            
+        if h_bar.maximum() > 0:
+            h_bar.setValue(int(ratio_x * h_bar.maximum()))
+        if v_bar.maximum() > 0:
+            v_bar.setValue(int(ratio_y * v_bar.maximum()))
+
     def _cleanup_old_threads(self):
         """清理旧线程"""
         if self._is_shutting_down:
@@ -651,15 +651,15 @@ class SmoothPDFView(QGraphicsView):
         super().resizeEvent(event)
         
         # 如果有文档加载，重新计算自适应缩放和重新布局
-        if self.pdf_doc and hasattr(self, 'auto_fit_zoom'):
+        if self.pdf_doc and hasattr(self, 'auto_fit_zoom') and not self._is_shutting_down:
             old_width = self.container_width
             self._calculate_auto_fit_zoom()
             
-            # 重新设置整个页面布局（包括场景大小）
-            self._setup_pages()
-            
-            # 如果容器宽度显著变化，重新渲染以获得最佳显示效果
-            if abs(self.container_width - old_width) > 20:
+            # 只有在容器宽度显著变化时才重新布局
+            if abs(self.container_width - old_width) > 50:
+                # 重新设置整个页面布局（包括场景大小）
+                self._setup_pages()
+                # 重新渲染以获得最佳显示效果
                 self._render_visible_pages()
 
 
@@ -671,7 +671,6 @@ class PDFWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.doc = None
-        self.zoom_factor = DEFAULT_ZOOM
         
         # 创建布局
         layout = QVBoxLayout(self)
@@ -682,7 +681,7 @@ class PDFWidget(QWidget):
         
         # 占位符
         self.placeholder = QLabel(
-            "请打开PDF文件\n\n可通过 Ctrl+滚轮 控制缩放"
+            "请打开PDF文件"
         )
         self.placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.placeholder.setStyleSheet("""
@@ -742,14 +741,6 @@ class PDFWidget(QWidget):
             print(f"加载PDF失败: {e}")
             return False
             
-    def set_zoom(self, zoom_factor):
-        """设置缩放"""
-        if not self.doc:
-            return
-            
-        self.zoom_factor = zoom_factor
-        self.pdf_view.set_zoom(zoom_factor)
-        
     def cleanup(self):
         """清理资源"""
         if hasattr(self, 'pdf_view'):
