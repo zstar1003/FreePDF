@@ -1,10 +1,11 @@
 """常量定义"""
 
 # 渲染设置
-DEFAULT_ZOOM = 1.5
-DEFAULT_DPI = 180
-MAX_ZOOM = 3.0
-MIN_ZOOM = 0.5
+DEFAULT_ZOOM = 1.0  # 改为1.0，让自适应缩放来决定初始缩放
+DEFAULT_DPI = 200   # 提高默认DPI获得更好清晰度
+HIGH_QUALITY_DPI = 300  # 高质量渲染DPI
+MAX_ZOOM = 5.0      # 增加最大缩放
+MIN_ZOOM = 0.3      # 允许更小的缩放
 ZOOM_STEP = 1.25
 
 # 缓存设置
@@ -13,7 +14,7 @@ PRELOAD_DISTANCE = 2
 
 # 显示设置
 PAGE_SPACING = 20
-MAX_PAGE_WIDTH = 600  # 减小以适应双预览
+MAX_PAGE_WIDTH = 1200  # 增加以支持更高清晰度，会被自适应缩放控制
 VIEWPORT_BUFFER = 100
 
 # 定时器设置

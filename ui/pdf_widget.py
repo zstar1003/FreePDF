@@ -14,6 +14,7 @@ from utils.constants import (
     BORDER_COLOR,
     DEFAULT_DPI,
     DEFAULT_ZOOM,
+    HIGH_QUALITY_DPI,
     HIGHLIGHT_COLOR,
     MAX_PAGE_WIDTH,
     MAX_ZOOM,
@@ -134,6 +135,10 @@ class SmoothPDFView(QGraphicsView):
         # 文本选择
         self.text_selection = TextSelection()
         
+        # 自适应缩放相关
+        self.auto_fit_zoom = DEFAULT_ZOOM
+        self.container_width = 800  # 默认容器宽度
+        
         # 绑定滚动事件
         self.verticalScrollBar().valueChanged.connect(self._on_scroll)
         
@@ -146,6 +151,8 @@ class SmoothPDFView(QGraphicsView):
         
         self.pdf_doc = pdf_doc
         if pdf_doc and pdf_doc.doc:
+            # 先计算自适应缩放
+            self._calculate_auto_fit_zoom()
             self._setup_pages()
             self.page_cache.clear()
             self._render_visible_pages()
@@ -194,6 +201,32 @@ class SmoothPDFView(QGraphicsView):
         # 设置场景大小
         scene_width = max(display_width for display_width in [MAX_PAGE_WIDTH]) if self.page_items else 800
         self.scene.setSceneRect(0, 0, scene_width, current_y)
+    
+    def _calculate_auto_fit_zoom(self):
+        """计算自适应缩放比例"""
+        if not self.pdf_doc or not self.pdf_doc.doc:
+            return
+        
+        # 更新容器宽度
+        self.container_width = self.viewport().width() - 40  # 减去边距
+        
+        # 获取第一页尺寸作为参考
+        first_page_rect = self.pdf_doc.get_page_rect(0)
+        if not first_page_rect:
+            return
+        
+        # 计算适合容器宽度的缩放比例
+        page_width = first_page_rect.width
+        if page_width > 0:
+            fit_zoom = self.container_width / page_width
+            # 限制在合理范围内
+            fit_zoom = max(self.min_zoom, min(fit_zoom, self.max_zoom))
+            
+            self.auto_fit_zoom = fit_zoom
+            self.base_zoom = fit_zoom
+            self.current_zoom = fit_zoom
+            
+            print(f"自适应缩放: {fit_zoom:.2f}, 页面宽度: {page_width:.1f}, 容器宽度: {self.container_width}")
         
     def set_zoom(self, zoom_factor):
         """设置缩放（即时变换）"""
@@ -271,7 +304,7 @@ class SmoothPDFView(QGraphicsView):
         if not self._is_shutting_down:
             self.preload_timer.start(PRELOAD_DELAY)
             
-    def _render_page(self, page_num):
+    def _render_page(self, page_num, high_quality=True):
         """渲染指定页面"""
         if (self._is_shutting_down or 
             page_num in self.pending_renders or 
@@ -283,13 +316,20 @@ class SmoothPDFView(QGraphicsView):
         # 计算当前缩放下的渲染尺寸
         effective_zoom = self.current_zoom
         
+        # 使用更高的DPI获得更好的质量
+        render_dpi = HIGH_QUALITY_DPI if high_quality else DEFAULT_DPI
+        
         thread = PageRenderThread(
             self.pdf_doc.doc, page_num, 
-            effective_zoom, DEFAULT_DPI, self
+            effective_zoom, render_dpi, 
+            target_width=self.container_width,
+            high_quality=high_quality,
+            parent=self
         )
         
         # 连接信号
         thread.page_rendered.connect(self._on_page_rendered)
+        thread.preview_rendered.connect(self._on_preview_rendered)
         thread.finished.connect(lambda: self._on_thread_finished(page_num))
         
         self.render_threads[page_num] = thread
@@ -309,6 +349,16 @@ class SmoothPDFView(QGraphicsView):
         
         # 更新文本选择
         self._update_visible_words()
+    
+    def _on_preview_rendered(self, page_num, pixmap):
+        """预览渲染完成（快速低质量版本）"""
+        if self._is_shutting_down or page_num >= len(self.page_items):
+            return
+            
+        # 只有当没有高质量版本时才显示预览
+        if not self.page_cache.has_page(page_num):
+            page_item = self.page_items[page_num]
+            page_item.set_pixmap(pixmap)
         
     def _on_thread_finished(self, page_num):
         """线程完成清理"""
@@ -333,7 +383,8 @@ class SmoothPDFView(QGraphicsView):
                 not self.page_cache.has_page(page_num) and 
                 page_num not in self.pending_renders and
                 not self._is_shutting_down):
-                self._render_page(page_num)
+                # 预加载页面使用快速渲染
+                self._render_page(page_num, high_quality=False)
                 
     def _get_current_page(self):
         """获取当前页面"""
@@ -419,6 +470,19 @@ class SmoothPDFView(QGraphicsView):
         self.pending_renders.clear()
         
         print("PDF视图线程清理完成")
+    
+    def resizeEvent(self, event):
+        """窗口大小变化事件"""
+        super().resizeEvent(event)
+        
+        # 如果有文档加载，重新计算自适应缩放
+        if self.pdf_doc and hasattr(self, 'auto_fit_zoom'):
+            old_width = self.container_width
+            self._calculate_auto_fit_zoom()
+            
+            # 如果容器宽度显著变化，重新渲染
+            if abs(self.container_width - old_width) > 50:
+                self._render_visible_pages()
 
 
 class PDFWidget(QWidget):
