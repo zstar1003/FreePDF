@@ -1,25 +1,27 @@
 """PDF显示组件"""
 
-from PyQt6.QtCore import QRect, Qt, QTimer, pyqtSignal, QPointF
-from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QTransform
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor, QFont, QPainter
 from PyQt6.QtWidgets import (
-    QApplication, QLabel, QScrollArea, QVBoxLayout, QWidget,
-    QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsProxyWidget
+    QApplication,
+    QGraphicsPixmapItem,
+    QGraphicsScene,
+    QGraphicsView,
+    QLabel,
+    QVBoxLayout,
+    QWidget,
 )
 
 from core.pdf_document import PageCache
 from core.render_thread import PageRenderThread
 from core.text_selection import TextSelection
 from utils.constants import (
-    BORDER_COLOR,
     DEFAULT_DPI,
     DEFAULT_ZOOM,
     HIGH_QUALITY_DPI,
-    HIGHLIGHT_COLOR,
     MAX_PAGE_WIDTH,
     MAX_ZOOM,
     MIN_ZOOM,
-    PAGE_BORDER_COLOR,
     PAGE_SPACING,
     PLACEHOLDER_COLOR,
     PRELOAD_DELAY,
@@ -45,7 +47,7 @@ class PageGraphicsItem(QGraphicsPixmapItem):
         
     def set_placeholder(self, width, height):
         """设置占位符"""
-        from PyQt6.QtGui import QPixmap, QPainter, QBrush
+        from PyQt6.QtGui import QPainter, QPixmap
         
         placeholder = QPixmap(width, height)
         placeholder.fill(QColor(*PLACEHOLDER_COLOR))
@@ -168,8 +170,15 @@ class SmoothPDFView(QGraphicsView):
         self.page_heights = []
         self.page_positions = []
         
-        current_y = 0
+        current_y = PAGE_SPACING  # 顶部留一些空间
         base_scale = self.base_zoom * (DEFAULT_DPI / 72.0)
+        
+        # 计算容器宽度用于居中
+        container_width = self.viewport().width()
+        if container_width <= 0:
+            container_width = 800  # 默认宽度
+        
+        max_page_width = 0
         
         for page_num in range(self.pdf_doc.total_pages):
             page_rect = self.pdf_doc.get_page_rect(page_num)
@@ -186,10 +195,16 @@ class SmoothPDFView(QGraphicsView):
                 display_width = MAX_PAGE_WIDTH
                 display_height = int(display_height * scale_ratio)
             
+            # 记录最大页面宽度
+            max_page_width = max(max_page_width, display_width)
+            
+            # 计算居中的x坐标
+            center_x = max(0, (container_width - display_width) / 2)
+            
             # 创建页面图形项（先用占位符）
             page_item = PageGraphicsItem(page_num)
             page_item.set_placeholder(display_width, display_height)
-            page_item.setPos(0, current_y)
+            page_item.setPos(center_x, current_y)
             
             self.scene.addItem(page_item)
             self.page_items.append(page_item)
@@ -197,10 +212,31 @@ class SmoothPDFView(QGraphicsView):
             self.page_heights.append(display_height)
             
             current_y += display_height + PAGE_SPACING
+        
+        # 设置场景大小，确保有足够的宽度容纳居中的页面
+        scene_width = max(container_width, max_page_width + 40) if self.page_items else container_width
+        self.scene.setSceneRect(0, 0, scene_width, current_y + PAGE_SPACING)
+        
+        # 重新居中所有页面
+        self._center_all_pages()
+    
+    def _center_all_pages(self):
+        """重新居中所有页面"""
+        if not self.page_items:
+            return
             
-        # 设置场景大小
-        scene_width = max(display_width for display_width in [MAX_PAGE_WIDTH]) if self.page_items else 800
-        self.scene.setSceneRect(0, 0, scene_width, current_y)
+        container_width = self.viewport().width()
+        if container_width <= 0:
+            return
+            
+        for page_item in self.page_items:
+            current_pos = page_item.pos()
+            page_width = page_item.pixmap().width() if page_item.pixmap() else 0
+            
+            if page_width > 0:
+                # 计算新的居中x坐标
+                center_x = max(0, (container_width - page_width) / 2)
+                page_item.setPos(center_x, current_pos.y())
     
     def _calculate_auto_fit_zoom(self):
         """计算自适应缩放比例"""
@@ -347,6 +383,9 @@ class SmoothPDFView(QGraphicsView):
         page_item = self.page_items[page_num]
         page_item.set_pixmap(pixmap)
         
+        # 重新居中该页面
+        self._center_page(page_item)
+        
         # 更新文本选择
         self._update_visible_words()
     
@@ -359,7 +398,20 @@ class SmoothPDFView(QGraphicsView):
         if not self.page_cache.has_page(page_num):
             page_item = self.page_items[page_num]
             page_item.set_pixmap(pixmap)
+            
+            # 重新居中该页面
+            self._center_page(page_item)
         
+    def _center_page(self, page_item):
+        """居中单个页面"""
+        current_pos = page_item.pos()
+        page_width = page_item.pixmap().width() if page_item.pixmap() else 0
+        
+        if page_width > 0:
+            container_width = self.viewport().width()
+            center_x = max(0, (container_width - page_width) / 2)
+            page_item.setPos(center_x, current_pos.y())
+         
     def _on_thread_finished(self, page_num):
         """线程完成清理"""
         self.pending_renders.discard(page_num)
@@ -475,10 +527,13 @@ class SmoothPDFView(QGraphicsView):
         """窗口大小变化事件"""
         super().resizeEvent(event)
         
-        # 如果有文档加载，重新计算自适应缩放
+        # 如果有文档加载，重新计算自适应缩放和居中
         if self.pdf_doc and hasattr(self, 'auto_fit_zoom'):
             old_width = self.container_width
             self._calculate_auto_fit_zoom()
+            
+            # 重新居中所有页面
+            self._center_all_pages()
             
             # 如果容器宽度显著变化，重新渲染
             if abs(self.container_width - old_width) > 50:

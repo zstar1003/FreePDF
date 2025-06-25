@@ -146,7 +146,7 @@ class PageRenderThread(QThread):
                 qimg = qimg.convertToFormat(QImage.Format.Format_RGB32)
             
             return QPixmap.fromImage(qimg)
-        except:
+        except:  # noqa: E722
             # 回退到PPM格式
             img_data = pix.tobytes("ppm")
             qimg = QImage.fromData(img_data)
