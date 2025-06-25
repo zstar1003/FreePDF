@@ -13,9 +13,9 @@ MAX_CACHE_SIZE = 6
 PRELOAD_DISTANCE = 2
 
 # 显示设置
-PAGE_SPACING = 20
+PAGE_SPACING = 1  # 进一步减少到1像素，实现真正无缝连续
 MAX_PAGE_WIDTH = 1200  # 增加以支持更高清晰度，会被自适应缩放控制
-VIEWPORT_BUFFER = 100
+VIEWPORT_BUFFER = 50  # 减少缓冲区以节省空间
 
 # 定时器设置
 PRELOAD_DELAY = 150  # ms

@@ -152,15 +152,23 @@ class SmoothPDFView(QGraphicsView):
         if self._is_shutting_down:
             return
             
+        # 停止所有当前的渲染操作
         self._cleanup_old_threads()
         
         self.pdf_doc = pdf_doc
         if pdf_doc and pdf_doc.doc:
-            # 先计算自适应缩放
+            # 1. 先计算自适应缩放
             self._calculate_auto_fit_zoom()
-            self._setup_pages()
+            
+            # 2. 清除所有缓存，确保从头开始
             self.page_cache.clear()
-            self._render_visible_pages()
+            self.pending_renders.clear()
+            
+            # 3. 使用自适应缩放值重新设置页面布局
+            self._setup_pages()
+            
+            # 4. 延迟渲染，确保布局完成后再开始渲染
+            QTimer.singleShot(50, self._render_visible_pages)
             
     def _setup_pages(self):
         """设置页面布局"""
@@ -173,8 +181,9 @@ class SmoothPDFView(QGraphicsView):
         self.page_heights = []
         self.page_positions = []
         
-        current_y = PAGE_SPACING  # 顶部留一些空间
-        base_scale = self.base_zoom * (DEFAULT_DPI / 72.0)
+        current_y = 0  # 从顶部开始，不留空间
+        # 使用当前缩放值（包括自适应缩放）
+        base_scale = self.current_zoom * (DEFAULT_DPI / 72.0)
         
         # 计算容器宽度用于居中
         container_width = self.viewport().width()
@@ -201,8 +210,8 @@ class SmoothPDFView(QGraphicsView):
             # 记录最大页面宽度
             max_page_width = max(max_page_width, display_width)
             
-            # 计算居中的x坐标
-            center_x = max(0, (container_width - display_width) / 2)
+            # 计算居中的x坐标，减少左右边距
+            center_x = max(1, (container_width - display_width) / 2)  # 最小边距改为1
             
             # 创建页面图形项（先用占位符）
             page_item = PageGraphicsItem(page_num)
@@ -214,11 +223,14 @@ class SmoothPDFView(QGraphicsView):
             self.page_positions.append(current_y)
             self.page_heights.append(display_height)
             
-            current_y += display_height + PAGE_SPACING
+            # 只在页面间添加最小间距，第一页不加
+            current_y += display_height
+            if page_num < self.pdf_doc.total_pages - 1:  # 最后一页后不加间距
+                current_y += PAGE_SPACING
         
-        # 设置场景大小，确保有足够的宽度容纳居中的页面
-        scene_width = max(container_width, max_page_width + 40) if self.page_items else container_width
-        self.scene.setSceneRect(0, 0, scene_width, current_y + PAGE_SPACING)
+        # 设置场景大小，减少额外空间
+        scene_width = max(container_width, max_page_width + 5) if self.page_items else container_width  # 进一步减少额外宽度
+        self.scene.setSceneRect(0, 0, scene_width, current_y)  # 底部不留额外空间
         
         # 重新居中所有页面
         self._center_all_pages()
@@ -237,8 +249,8 @@ class SmoothPDFView(QGraphicsView):
             page_width = page_item.pixmap().width() if page_item.pixmap() else 0
             
             if page_width > 0:
-                # 计算新的居中x坐标
-                center_x = max(0, (container_width - page_width) / 2)
+                # 计算新的居中x坐标，保持最小边距一致
+                center_x = max(1, (container_width - page_width) / 2)  # 最小边距改为1
                 page_item.setPos(center_x, current_pos.y())
     
     def _calculate_auto_fit_zoom(self):
@@ -246,8 +258,8 @@ class SmoothPDFView(QGraphicsView):
         if not self.pdf_doc or not self.pdf_doc.doc:
             return
         
-        # 更新容器宽度
-        self.container_width = self.viewport().width() - 40  # 减去边距
+        # 更新容器宽度，减少边距以充分利用空间
+        self.container_width = self.viewport().width() - 10  # 减少边距从40到10
         
         # 获取第一页尺寸作为参考
         first_page_rect = self.pdf_doc.get_page_rect(0)
@@ -287,39 +299,63 @@ class SmoothPDFView(QGraphicsView):
         if abs(zoom_factor - self.current_zoom) < 0.01:
             return
             
-        # 保存当前视图中心
-        center_point = self.mapToScene(self.viewport().rect().center())
+        # 获取当前滚动位置作为百分比
+        old_scroll_ratio_x = 0
+        old_scroll_ratio_y = 0
         
-        # 立即应用变换矩阵缩放（这是关键！）
-        scale_factor = zoom_factor / self.current_zoom
-        self.scale(scale_factor, scale_factor)
+        h_bar = self.horizontalScrollBar()
+        v_bar = self.verticalScrollBar()
+        
+        if h_bar.maximum() > 0:
+            old_scroll_ratio_x = h_bar.value() / h_bar.maximum()
+        if v_bar.maximum() > 0:
+            old_scroll_ratio_y = v_bar.value() / v_bar.maximum()
+            
+        # 更新缩放比例
         self.current_zoom = zoom_factor
+        self.base_zoom = zoom_factor
         
-        # 恢复视图中心
-        self.centerOn(center_point)
+        # 重新布局所有页面（这是关键！）
+        self._setup_pages()
         
-        # 启动高质量渲染定时器
-        self.high_quality_timer.stop()
-        self.high_quality_timer.start(300)  # 300ms后进行高质量渲染
+        # 清除缓存并重新渲染可见页面
+        self.page_cache.clear()
+        self._render_visible_pages()
+        
+        # 恢复滚动位置
+        QTimer.singleShot(50, lambda: self._restore_scroll_position(old_scroll_ratio_x, old_scroll_ratio_y))
+        
+    def _restore_scroll_position(self, ratio_x, ratio_y):
+        """恢复滚动位置"""
+        h_bar = self.horizontalScrollBar()
+        v_bar = self.verticalScrollBar()
+        
+        if h_bar.maximum() > 0:
+            h_bar.setValue(int(ratio_x * h_bar.maximum()))
+        if v_bar.maximum() > 0:
+            v_bar.setValue(int(ratio_y * v_bar.maximum()))
         
     def _render_high_quality(self):
         """渲染高质量页面"""
         if not self.pdf_doc:
             return
             
-        # 清除当前缓存并重新渲染可见页面
+        # 获取可见页面
         visible_pages = self._get_visible_pages()
         
         # 停止所有正在进行的渲染
         self._cleanup_old_threads()
         
-        # 清除可见页面的缓存
+        # 清除可见页面的缓存，强制重新渲染
         for page_num in visible_pages:
             if page_num in self.page_cache.page_cache:
                 del self.page_cache.page_cache[page_num]
                 
-        # 重新渲染可见页面
-        self._render_visible_pages()
+        # 重新渲染可见页面，使用高质量
+        for page_num in visible_pages:
+            if (page_num not in self.pending_renders and
+                not self._is_shutting_down):
+                self._render_page(page_num, high_quality=True)
         
     def _get_visible_pages(self):
         """获取可见页面"""
@@ -421,7 +457,7 @@ class SmoothPDFView(QGraphicsView):
         
         if page_width > 0:
             container_width = self.viewport().width()
-            center_x = max(0, (container_width - page_width) / 2)
+            center_x = max(1, (container_width - page_width) / 2)  # 最小边距改为1
             page_item.setPos(center_x, current_pos.y())
          
     def _on_thread_finished(self, page_num):
@@ -500,7 +536,12 @@ class SmoothPDFView(QGraphicsView):
         if self._is_shutting_down:
             return
             
-        # 只清理已完成的线程
+        # 停止所有正在运行的线程
+        for page_num, thread in list(self.render_threads.items()):
+            if thread.isRunning():
+                thread.stop()  # 停止渲染
+        
+        # 清理已完成的线程
         finished_threads = []
         for page_num, thread in list(self.render_threads.items()):
             if not thread.isRunning():
@@ -510,6 +551,9 @@ class SmoothPDFView(QGraphicsView):
             if page_num in self.render_threads:
                 thread = self.render_threads.pop(page_num)
                 QTimer.singleShot(100, thread.deleteLater)
+                
+        # 清空pending renders
+        self.pending_renders.clear()
     
     def cleanup_threads(self):
         """完全清理线程"""
@@ -553,8 +597,8 @@ class SmoothPDFView(QGraphicsView):
             # 重新居中所有页面
             self._center_all_pages()
             
-            # 如果容器宽度显著变化，重新渲染
-            if abs(self.container_width - old_width) > 50:
+            # 如果容器宽度显著变化，重新渲染以获得最佳显示效果
+            if abs(self.container_width - old_width) > 20:  # 降低重新渲染的阈值
                 self._render_visible_pages()
 
 
