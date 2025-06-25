@@ -2,9 +2,10 @@
 
 import os
 
-from PyQt6.QtCore import Qt, pyqtSlot
-from PyQt6.QtGui import QAction, QIcon
+from PyQt6.QtCore import Qt, pyqtSlot, QTimer
+from PyQt6.QtGui import QAction, QIcon, QKeySequence
 from PyQt6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -17,6 +18,8 @@ from PyQt6.QtWidgets import (
     QStatusBar,
     QVBoxLayout,
     QWidget,
+    QMenuBar,
+    QCheckBox,
 )
 
 from core.translation import TranslationManager
@@ -42,6 +45,7 @@ class MainWindow(QMainWindow):
         # 初始化组件
         self.current_file = None
         self.translation_manager = TranslationManager()
+        self._pending_zoom_value = None
         
         # 创建UI
         self.setup_ui()
@@ -113,6 +117,8 @@ class MainWindow(QMainWindow):
         
         # 左侧标题
         left_title = QLabel("原始文档")
+        left_title.setFixedHeight(35)  # 设置固定高度
+        left_title.setAlignment(Qt.AlignmentFlag.AlignCenter)  # 居中对齐
         left_title.setStyleSheet("""
             QLabel {
                 background-color: #f8f9fa;
@@ -120,6 +126,7 @@ class MainWindow(QMainWindow):
                 border-bottom: 1px solid #dee2e6;
                 font-weight: bold;
                 color: #495057;
+                font-size: 14px;
             }
         """)
         left_layout.addWidget(left_title)
@@ -136,6 +143,8 @@ class MainWindow(QMainWindow):
         
         # 右侧标题
         right_title = QLabel("翻译文档")
+        right_title.setFixedHeight(35)  # 设置固定高度
+        right_title.setAlignment(Qt.AlignmentFlag.AlignCenter)  # 居中对齐
         right_title.setStyleSheet("""
             QLabel {
                 background-color: #f8f9fa;
@@ -143,6 +152,7 @@ class MainWindow(QMainWindow):
                 border-bottom: 1px solid #dee2e6;
                 font-weight: bold;
                 color: #495057;
+                font-size: 14px;
             }
         """)
         right_layout.addWidget(right_title)
@@ -151,9 +161,9 @@ class MainWindow(QMainWindow):
         self.right_pdf_widget = PDFWidget()
         right_layout.addWidget(self.right_pdf_widget)
         
-        # 创建加载动画，但不添加到布局中！
+        # 创建加载动画
         self.loading_widget = LoadingWidget("等待上传PDF文件...")
-        # 设置parent为right_frame，但不添加到layout
+        # 设置parent为right_frame
         self.loading_widget.setParent(right_frame)
         self.loading_widget.hide()
         
@@ -276,7 +286,6 @@ class MainWindow(QMainWindow):
         self.loading_widget.show()
         
         # 使用QTimer延迟执行居中定位，确保布局已完成
-        from PyQt6.QtCore import QTimer
         QTimer.singleShot(10, self.center_loading_widget)
 
     def center_loading_widget(self):
@@ -361,7 +370,13 @@ class MainWindow(QMainWindow):
             
             # 恢复显示右侧占位符
             self.right_pdf_widget.placeholder.show()
-            self.right_pdf_widget.scroll_area.setWidget(self.right_pdf_widget.placeholder)
+            
+            # 切换回占位符显示（修复这里）
+            layout = self.right_pdf_widget.layout()
+            if self.right_pdf_widget.pdf_view in [layout.itemAt(i).widget() for i in range(layout.count())]:
+                layout.removeWidget(self.right_pdf_widget.pdf_view)
+                self.right_pdf_widget.pdf_view.hide()
+                layout.addWidget(self.right_pdf_widget.placeholder)
             
             # 显示错误状态
             self.status_label.set_status(f"翻译失败: {error_message}", "error")
@@ -396,8 +411,10 @@ class MainWindow(QMainWindow):
     def on_zoom_changed(self, value):
         """缩放改变"""
         zoom_factor = value / 100.0
+        
+        # 直接设置缩放，pdf_widget内部已经有防抖动机制
         self.left_pdf_widget.set_zoom(zoom_factor)
-        if self.right_pdf_widget.doc:  # 只有加载了文档才同步缩放
+        if self.right_pdf_widget.doc:
             self.right_pdf_widget.set_zoom(zoom_factor)
             
     @pyqtSlot(int)
@@ -434,5 +451,4 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         if hasattr(self, 'loading_widget') and self.loading_widget.isVisible():
             # 延迟执行居中，确保布局调整完成
-            from PyQt6.QtCore import QTimer
             QTimer.singleShot(50, self.center_loading_widget) 
