@@ -257,7 +257,8 @@ class MainWindow(QMainWindow):
                     total_pages = self.left_pdf_widget.doc.page_count
                     self.page_info_label.setText(f"共 {total_pages} 页")
                 
-                # 显示加载动画（叠加在PDF widget上）
+                # 隐藏右侧占位符并显示加载动画
+                self.right_pdf_widget.placeholder.hide()
                 self.show_loading_centered("正在准备翻译...")
                 
                 # 开始翻译
@@ -357,6 +358,10 @@ class MainWindow(QMainWindow):
         try:
             # 隐藏加载动画
             self.loading_widget.hide()
+            
+            # 恢复显示右侧占位符
+            self.right_pdf_widget.placeholder.show()
+            self.right_pdf_widget.scroll_area.setWidget(self.right_pdf_widget.placeholder)
             
             # 显示错误状态
             self.status_label.set_status(f"翻译失败: {error_message}", "error")

@@ -128,34 +128,42 @@ class SyncScrollArea:
         self.scroll_area1 = scroll_area1
         self.scroll_area2 = scroll_area2
         self._syncing = False
+        self._enabled = True 
         
         # 连接滚动条信号
+        self._connect_signals()
+        
+    def _connect_signals(self):
+        """连接信号"""
         self.scroll_area1.verticalScrollBar().valueChanged.connect(self._sync_scroll1)
         self.scroll_area2.verticalScrollBar().valueChanged.connect(self._sync_scroll2)
         
+    def _disconnect_signals(self):
+        """断开信号"""
+        try:
+            self.scroll_area1.verticalScrollBar().valueChanged.disconnect(self._sync_scroll1)
+            self.scroll_area2.verticalScrollBar().valueChanged.disconnect(self._sync_scroll2)
+        except TypeError:
+            pass
+            
     def _sync_scroll1(self, value):
         """同步第一个滚动区域到第二个"""
-        if not self._syncing:
+        if not self._syncing and self._enabled:
             self._syncing = True
             self.scroll_area2.verticalScrollBar().setValue(value)
             self._syncing = False
             
     def _sync_scroll2(self, value):
         """同步第二个滚动区域到第一个"""
-        if not self._syncing:
+        if not self._syncing and self._enabled:
             self._syncing = True
             self.scroll_area1.verticalScrollBar().setValue(value)
             self._syncing = False
             
     def set_enabled(self, enabled):
         """启用或禁用同步"""
-        if enabled:
-            self.scroll_area1.verticalScrollBar().valueChanged.connect(self._sync_scroll1)
-            self.scroll_area2.verticalScrollBar().valueChanged.connect(self._sync_scroll2)
-        else:
-            self.scroll_area1.verticalScrollBar().valueChanged.disconnect(self._sync_scroll1)
-            self.scroll_area2.verticalScrollBar().valueChanged.disconnect(self._sync_scroll2)
-
+        self._enabled = enabled
+        
 
 class StatusLabel(QLabel):
     """状态标签组件"""
