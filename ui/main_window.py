@@ -3,7 +3,7 @@
 import os
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot
-from PyQt6.QtGui import QAction, QIcon
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -40,7 +40,6 @@ class MainWindow(QMainWindow):
         
         # 创建UI
         self.setup_ui()
-        self.setup_menu()
         self.setup_status_bar()
         self.setup_connections()
         
@@ -151,24 +150,7 @@ class MainWindow(QMainWindow):
         
         main_layout.addWidget(self.splitter)
         
-    def setup_menu(self):
-        """设置菜单"""
-        menubar = self.menuBar()
-        
-        # 文件菜单
-        file_menu = menubar.addMenu("文件")
-        
-        open_action = QAction("打开PDF", self)
-        open_action.setShortcut("Ctrl+O")
-        open_action.triggered.connect(self.open_file)
-        file_menu.addAction(open_action)
-        
-        file_menu.addSeparator()
-        
-        exit_action = QAction("退出", self)
-        exit_action.setShortcut("Ctrl+Q")
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
+
         
     def setup_status_bar(self):
         """设置状态栏"""
@@ -230,8 +212,8 @@ class MainWindow(QMainWindow):
     def show_loading_centered(self, message):
         """显示居中的加载动画"""
         self.loading_widget.set_message(message)
-        # 先隐藏右侧PDF视图，避免加载过程中的视觉干扰
-        self.right_pdf_widget.pdf_view.hide()
+        # 隐藏右侧PDF视图，但保持容器本身可见
+        self.right_pdf_widget.reset_to_placeholder()
         self.loading_widget.show()
         
         # 使用QTimer延迟执行居中定位，确保布局已完成
@@ -287,20 +269,115 @@ class MainWindow(QMainWindow):
                 self.on_translation_failed("翻译文件不存在")
                 return
             
+            # 额外验证PDF文件
+            if not self._validate_pdf_file(translated_file):
+                self.on_translation_failed("翻译后的PDF文件格式无效或损坏")
+                return
+            
             # 记录翻译文件
             self.translation_manager.set_translated_file(self.current_file, translated_file)
             
             # 先隐藏加载动画，然后加载翻译后的文件到右侧
             self.loading_widget.hide()
             
-            if self.right_pdf_widget.load_pdf(translated_file):
+            # 重试机制加载PDF
+            retry_count = 3
+            loaded = False
+            
+            for i in range(retry_count):
+                if self.right_pdf_widget.load_pdf(translated_file):
+                    loaded = True
+                    break
+                else:
+                    if i < retry_count - 1:  # 不是最后一次尝试
+                        print(f"加载PDF失败，正在重试... ({i+1}/{retry_count})")
+                        # 短暂等待后重试
+                        import time
+                        time.sleep(0.5)
+            
+            if loaded:
+                # 确保PDF视图显示
+                self.right_pdf_widget.pdf_view.show()
+                
+                # 强制刷新显示
+                QTimer.singleShot(100, self._force_pdf_display)
+                
                 filename = os.path.basename(translated_file)
-                self.status_label.set_status(f"翻译完成: {filename}", "success")
+                file_size = os.path.getsize(translated_file) / (1024 * 1024)  # MB
+                self.status_label.set_status(f"翻译完成: {filename} ({file_size:.1f}MB)", "success")
+                print(f"翻译成功，文件保存在: {translated_file}")
             else:
-                self.on_translation_failed("无法加载翻译后的文件")
+                self.on_translation_failed("多次尝试后仍无法加载翻译后的文件")
                 
         except Exception as e:
             self.on_translation_failed(f"加载翻译文件时出错: {str(e)}")
+            
+    def _validate_pdf_file(self, file_path):
+        """验证PDF文件是否有效"""
+        try:
+            # 检查文件大小
+            file_size = os.path.getsize(file_path)
+            if file_size < 1024:  # 小于1KB
+                print(f"PDF文件太小: {file_size} bytes")
+                return False
+            
+            # 检查PDF文件头
+            with open(file_path, 'rb') as f:
+                header = f.read(8)
+                if not header.startswith(b'%PDF-'):
+                    print(f"无效的PDF文件头: {header}")
+                    return False
+            
+            # 尝试使用fitz验证
+            try:
+                import fitz
+                doc = fitz.open(file_path)
+                page_count = doc.page_count
+                doc.close()
+                
+                if page_count == 0:
+                    print("PDF文件没有页面")
+                    return False
+                    
+                print(f"PDF文件验证成功，共{page_count}页，大小{file_size/1024/1024:.1f}MB")
+                return True
+                
+            except Exception as e:
+                print(f"fitz验证PDF失败: {e}")
+                return False
+                
+        except Exception as e:
+            print(f"验证PDF文件时出错: {e}")
+            return False
+    
+    def _force_pdf_display(self):
+        """强制显示PDF视图"""
+        try:
+            # 确保右侧PDF容器可见
+            self.right_pdf_widget.show()
+            
+            # 确保QStackedWidget显示PDF视图（索引1）
+            if hasattr(self.right_pdf_widget, 'stacked_widget'):
+                self.right_pdf_widget.stacked_widget.setCurrentIndex(1)
+                print("已切换到PDF视图页面")
+            
+            # 显示PDF视图
+            self.right_pdf_widget.pdf_view.show()
+            
+            # 强制更新整个右侧区域
+            self.right_pdf_widget.update()
+            self.right_pdf_widget.repaint()
+            
+            # 激活PDF视图
+            self.right_pdf_widget.pdf_view.setFocus()
+            
+            # 触发整个窗口重绘
+            self.update()
+            self.repaint()
+            
+            print("PDF显示已强制刷新")
+        except Exception as e:
+            print(f"强制显示PDF时出错: {e}")
             
 
             

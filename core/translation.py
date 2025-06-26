@@ -33,6 +33,47 @@ class TranslationThread(QThread):
     def stop(self):
         """停止翻译"""
         self._stop_requested = True
+    
+    def _is_valid_pdf(self, file_path):
+        """检查PDF文件是否有效"""
+        try:
+            if not os.path.exists(file_path):
+                return False
+            
+            # 检查文件大小
+            file_size = os.path.getsize(file_path)
+            if file_size < 1024:  # 小于1KB可能是无效文件
+                print(f"PDF文件太小，可能无效: {file_size} bytes")
+                return False
+            
+            # 尝试读取PDF文件头
+            with open(file_path, 'rb') as f:
+                header = f.read(8)
+                if not header.startswith(b'%PDF-'):
+                    print(f"PDF文件头无效: {header}")
+                    return False
+            
+            # 尝试使用fitz打开PDF
+            try:
+                import fitz
+                doc = fitz.open(file_path)
+                page_count = doc.page_count
+                doc.close()
+                
+                if page_count == 0:
+                    print("PDF文件页数为0")
+                    return False
+                
+                print(f"PDF文件有效，共{page_count}页")
+                return True
+                
+            except Exception as e:
+                print(f"无法使用fitz打开PDF: {e}")
+                return False
+                
+        except Exception as e:
+            print(f"检查PDF文件时出错: {e}")
+            return False
         
     def run(self):
         """执行翻译"""
@@ -111,6 +152,10 @@ class TranslationThread(QThread):
             self.translation_progress.emit("正在翻译PDF文档，请稍候...")
             
             try:
+                # 获取输入文件所在目录作为输出目录
+                input_dir = os.path.dirname(os.path.abspath(self.input_file))
+                print(f"输出目录设置为: {input_dir}")
+                
                 # 设置翻译参数（参考test_api.py）
                 params = {
                     "model": model,
@@ -118,6 +163,7 @@ class TranslationThread(QThread):
                     "lang_out": self.lang_out,
                     "service": self.service,
                     "thread": self.threads,
+                    "output": input_dir,  # 设置输出目录为输入文件所在目录
                 }
                 
                 print(f"翻译参数: {params}")
@@ -134,11 +180,19 @@ class TranslationThread(QThread):
                     if self._stop_requested:
                         return
  
-                    if file_mono and os.path.exists(file_mono):
+                    # 检查文件是否存在和有效性
+                    result_file = None
+                    if file_mono and os.path.exists(file_mono) and self._is_valid_pdf(file_mono):
+                        result_file = file_mono
                         print(f"使用单语版本: {file_mono}")
-                        self.translation_completed.emit(os.path.abspath(file_mono))
+                    elif file_dual and os.path.exists(file_dual) and self._is_valid_pdf(file_dual):
+                        result_file = file_dual
+                        print(f"使用双语版本: {file_dual}")
+                    
+                    if result_file:
+                        self.translation_completed.emit(os.path.abspath(result_file))
                     else:
-                        error_msg = "翻译完成但无法找到结果文件"
+                        error_msg = "翻译完成但生成的PDF文件无效或无法找到"
                         print(error_msg)
                         self.translation_failed.emit(error_msg)
                 else:
