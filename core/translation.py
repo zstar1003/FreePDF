@@ -1,8 +1,9 @@
 """PDF翻译处理模块"""
 
-import json
 import os
+import sys
 import traceback
+from io import StringIO
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
@@ -33,7 +34,7 @@ class TranslationThread(QThread):
     def stop(self):
         """停止翻译"""
         self._stop_requested = True
-    
+        
     def _is_valid_pdf(self, file_path):
         """检查PDF文件是否有效"""
         try:
@@ -77,53 +78,39 @@ class TranslationThread(QThread):
         
     def run(self):
         """执行翻译"""
+        # 保存原始的stdout和stderr
+        original_stdout = sys.stdout
+        original_stderr = sys.stderr
+        
         try:
+            # 在exe环境中，重定向stdout和stderr到StringIO对象
+            # 这样tqdm就有一个有效的输出流可以写入
+            if getattr(sys, 'frozen', False):  # 检查是否在PyInstaller打包的exe环境中
+                fake_stdout = StringIO()
+                fake_stderr = StringIO()
+                sys.stdout = fake_stdout
+                sys.stderr = fake_stderr
+                print("在exe环境中运行，已重定向标准输出")
+            
             if self._stop_requested:
                 return
                 
-            self.translation_progress.emit("正在初始化翻译模块...")
+            self.translation_progress.emit("正在准备翻译环境...")
             
             # 检查输入文件
             if not os.path.exists(self.input_file):
                 self.translation_failed.emit(f"输入文件不存在: {self.input_file}")
                 return
             
-            print(f"开始翻译文件: {self.input_file}")
+            # 获取预加载的pdf2zh模块
+            from main import get_pdf2zh_modules
+            modules, config = get_pdf2zh_modules()
             
-            # 导入pdf2zh模块
-            try:
-                print("正在导入pdf2zh模块...")
-                from pdf2zh import translate
-                from pdf2zh.config import ConfigManager
-                from pdf2zh.doclayout import OnnxModel
-                # 加载配置
-                with open('pdf2zh_config.json', 'r') as f:
-                    config = json.load(f)
-
-                # 应用配置
-                for key, value in config.items():
-                    if key not in ['models', 'fonts']:
-                        ConfigManager.set(key, value)
-
-                # 设置模型
-                model_path = config['models']['doclayout_path']
-
-                # 设置字体
-                font_path = config['fonts']['zh']
-                ConfigManager.set("NOTO_FONT_PATH", font_path)
-                
-                print("pdf2zh模块导入成功")
-                
-            except ImportError as e:
-                error_msg = f"导入pdf2zh模块失败: {str(e)}\n请检查依赖安装是否完整"
-                print(error_msg)
-                self.translation_failed.emit(error_msg)
+            if modules is None or config is None:
+                self.translation_failed.emit("pdf2zh模块未正确预加载，请重启应用程序")
                 return
-            except Exception as e:
-                error_msg = f"导入pdf2zh模块时发生错误: {str(e)}"
-                print(error_msg)
-                self.translation_failed.emit(error_msg)
-                return
+            
+            print(f"开始翻译文件: {self.input_file}")
             
             if self._stop_requested:
                 return
@@ -131,7 +118,12 @@ class TranslationThread(QThread):
             self.translation_progress.emit("正在加载AI模型...")
             
             try:
-                print("开始加载OnnxModel...")
+                # 使用预加载的模块
+                translate = modules['translate']
+                OnnxModel = modules['OnnxModel']
+                
+                # 加载模型
+                model_path = config['models']['doclayout_path']
                 model = OnnxModel(model_path)
                 
                 if model is None:
@@ -156,7 +148,7 @@ class TranslationThread(QThread):
                 input_dir = os.path.dirname(os.path.abspath(self.input_file))
                 print(f"输出目录设置为: {input_dir}")
                 
-                # 设置翻译参数（参考test_api.py）
+                # 设置翻译参数
                 params = {
                     "model": model,
                     "lang_in": self.lang_in,
@@ -169,7 +161,7 @@ class TranslationThread(QThread):
                 print(f"翻译参数: {params}")
                 print(f"翻译文件: {self.input_file}")
                 
-                # 执行翻译（参考test_api.py）
+                # 执行翻译
                 result = translate(files=[self.input_file], **params)
                 print(f"翻译结果: {result}")
                 
@@ -207,6 +199,10 @@ class TranslationThread(QThread):
             error_msg = f"翻译线程异常: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
             self.translation_failed.emit(error_msg)
+        finally:
+            # 恢复原始的stdout和stderr
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
 
 
 class TranslationManager(QObject):
