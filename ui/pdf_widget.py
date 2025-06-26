@@ -30,12 +30,15 @@ class WebPDFView(QWebEngineView):
         settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
+        # 添加更多设置来解决渲染问题
+        settings.setAttribute(QWebEngineSettings.WebAttribute.WebGLEnabled, False)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, True)
         
         # 设置样式，包含强制隐藏PDF工具栏的CSS
         self.setStyleSheet("""
             QWebEngineView {
                 border: none;
-                background-color: #f5f5f5;
+                background-color: #ffffff;
             }
         """)
         
@@ -107,6 +110,37 @@ class WebPDFView(QWebEngineView):
     def load_pdf(self, file_path):
         """加载PDF文件"""
         try:
+            success = self.pdf_view.load_pdf(file_path)
+            
+            if success:
+                # 平滑切换到PDF视图，没有布局重排
+                self.stacked_widget.setCurrentIndex(1)
+                
+                # 移除淡入效果，直接显示PDF以避免渲染问题
+                # self._apply_fade_in_effect()
+                
+                # 强制刷新PDF视图
+                QTimer.singleShot(100, self._refresh_pdf_view)
+                
+                # 保存文档引用以兼容旧代码
+                try:
+                    import fitz
+                    self.doc = fitz.open(file_path)
+                except Exception as e:
+                    print(f"无法创建fitz文档引用: {e}")
+                    self.doc = None
+                
+                return True
+            else:
+                return False
+                
+        except Exception as e:
+            print(f"加载PDF失败: {e}")
+            return False
+    
+    def load_pdf(self, file_path):
+        """加载PDF文件"""
+        try:
             if not os.path.exists(file_path):
                 return False
             
@@ -146,26 +180,28 @@ class WebPDFView(QWebEngineView):
             return False
     
     def _apply_fade_in_effect(self):
-        """应用淡入效果"""
-        try:
-            # 创建透明度效果
-            self.opacity_effect = QGraphicsOpacityEffect()
-            self.setGraphicsEffect(self.opacity_effect)
-            
-            # 创建淡入动画
-            self.fade_animation = QPropertyAnimation(self.opacity_effect, b"opacity")
-            self.fade_animation.setDuration(300)  # 300ms淡入
-            self.fade_animation.setStartValue(0.0)
-            self.fade_animation.setEndValue(1.0)
-            self.fade_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-            
-            # 启动动画
-            self.fade_animation.start()
-            
-        except Exception as e:
-            print(f"淡入效果失败: {e}")
-            # 如果动画失败，确保PDF视图仍然可见
-            self.setGraphicsEffect(None)
+        """应用淡入效果 - 已禁用以避免渲染问题"""
+        # 注释掉淡入效果，因为QGraphicsOpacityEffect可能导致WebEngine渲染问题
+        pass
+        # try:
+        #     # 创建透明度效果
+        #     self.opacity_effect = QGraphicsOpacityEffect()
+        #     self.setGraphicsEffect(self.opacity_effect)
+        #     
+        #     # 创建淡入动画
+        #     self.fade_animation = QPropertyAnimation(self.opacity_effect, b"opacity")
+        #     self.fade_animation.setDuration(300)  # 300ms淡入
+        #     self.fade_animation.setStartValue(0.0)
+        #     self.fade_animation.setEndValue(1.0)
+        #     self.fade_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        #     
+        #     # 启动动画
+        #     self.fade_animation.start()
+        #     
+        # except Exception as e:
+        #     print(f"淡入效果失败: {e}")
+        #     # 如果动画失败，确保PDF视图仍然可见
+        #     self.setGraphicsEffect(None)
     
     def _on_load_finished(self, success):
         """页面加载完成"""
@@ -178,6 +214,11 @@ class WebPDFView(QWebEngineView):
                 # PDF加载完成
                 print(f"PDF加载成功: {self.pdf_path}")
                 
+                # 强制重绘和激活WebEngine
+                self.update()
+                self.repaint()
+                self.activateWindow()
+                
                 # 启动页面检测
                 self.page_timer.start()
                 
@@ -186,12 +227,14 @@ class WebPDFView(QWebEngineView):
                 
                 # 减少延迟时间，让PDF更快适应宽度
                 QTimer.singleShot(300, self._set_fit_width)
+                
+                # 再次强制重绘，确保PDF正确显示
+                QTimer.singleShot(500, self._force_refresh)
         else:
             print("页面加载失败")
     
     def _inject_pdf_scripts(self):
         """注入JavaScript脚本"""
-        # 简化的脚本，只监听基本信息
         js_code = """
         (function() {
             function checkPDFInfo() {
@@ -202,10 +245,16 @@ class WebPDFView(QWebEngineView):
                         if (app.pdfDocument) {
                             window.pdfTotalPages = app.pdfDocument.numPages;
                             window.pdfCurrentPage = app.page;
+
+                            // 自动隐藏侧边栏（PDF.js）
+                            if (app.pdfSidebar && app.pdfSidebar.isOpen) {
+                                app.pdfSidebar.close();
+                            }
+
                             return true;
                         }
                     }
-                    
+
                     // 默认值
                     window.pdfCurrentPage = 1;
                     window.pdfTotalPages = 1;
@@ -214,11 +263,24 @@ class WebPDFView(QWebEngineView):
                     return false;
                 }
             }
-            
+
+            // 初始尝试隐藏侧边栏
+            setTimeout(() => {
+                try {
+                    const plugin = document.querySelector('embed[type="application/pdf"]');
+                    if (plugin && plugin.contentWindow && plugin.contentWindow.PDFViewerApplication) {
+                        const app = plugin.contentWindow.PDFViewerApplication;
+                        if (app.pdfSidebar && app.pdfSidebar.isOpen) {
+                            app.pdfSidebar.close();
+                        }
+                    }
+                } catch (e) {}
+            }, 500);
+
             // 定期检查PDF信息
             setInterval(checkPDFInfo, 500);
             checkPDFInfo();
-            
+
             // 监听文本选择
             document.addEventListener('selectionchange', function() {
                 const selection = window.getSelection();
@@ -412,6 +474,25 @@ class WebPDFView(QWebEngineView):
         """
         self.page().runJavaScript(js_code)
     
+    def _force_refresh(self):
+        """强制刷新WebEngine显示"""
+        try:
+            self.update()
+            self.repaint()
+            # 确保WebEngine获得焦点
+            self.setFocus()
+            # 发送一个空的JavaScript来触发重绘
+            self.page().runJavaScript("void(0);")
+        except Exception as e:
+            print(f"强制刷新失败: {e}")
+    
+    def showEvent(self, event):
+        """显示事件处理"""
+        super().showEvent(event)
+        # 当WebEngine显示时，触发重绘以解决灰色显示问题
+        if self.pdf_path:
+            QTimer.singleShot(50, self._force_refresh)
+    
     def cleanup(self):
         """清理资源"""
         self.page_timer.stop()
@@ -473,8 +554,11 @@ class PDFWidget(QWidget):
                 # 平滑切换到PDF视图，没有布局重排
                 self.stacked_widget.setCurrentIndex(1)
                 
-                # 添加淡入效果，进一步减少突兀感
-                self._apply_fade_in_effect()
+                # 移除淡入效果，直接显示PDF以避免渲染问题
+                # self._apply_fade_in_effect()
+                
+                # 强制刷新PDF视图
+                QTimer.singleShot(100, self._refresh_pdf_view)
                 
                 # 保存文档引用以兼容旧代码
                 try:
@@ -492,27 +576,65 @@ class PDFWidget(QWidget):
             print(f"加载PDF失败: {e}")
             return False
     
-    def _apply_fade_in_effect(self):
-        """应用淡入效果"""
+    def _refresh_pdf_view(self):
+        """刷新PDF视图显示"""
         try:
-            # 创建透明度效果
-            self.opacity_effect = QGraphicsOpacityEffect()
-            self.pdf_view.setGraphicsEffect(self.opacity_effect)
+            # 强制更新PDF视图
+            self.pdf_view.update()
+            self.pdf_view.repaint()
             
-            # 创建淡入动画
-            self.fade_animation = QPropertyAnimation(self.opacity_effect, b"opacity")
-            self.fade_animation.setDuration(300)  # 300ms淡入
-            self.fade_animation.setStartValue(0.0)
-            self.fade_animation.setEndValue(1.0)
-            self.fade_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+            # 确保PDF视图获得焦点
+            self.pdf_view.setFocus()
             
-            # 启动动画
-            self.fade_animation.start()
+            # 触发窗口重绘
+            self.update()
+            self.repaint()
             
+            print("PDF视图已刷新")
         except Exception as e:
-            print(f"淡入效果失败: {e}")
-            # 如果动画失败，确保PDF视图仍然可见
-            self.pdf_view.setGraphicsEffect(None)
+            print(f"刷新PDF视图失败: {e}")
+    
+    def _apply_fade_in_effect(self):
+        """应用淡入效果 - 已禁用以避免渲染问题"""
+        # 注释掉淡入效果，因为QGraphicsOpacityEffect可能导致WebEngine渲染问题
+        pass
+                 # try:
+         #     # 创建透明度效果
+         #     self.opacity_effect = QGraphicsOpacityEffect()
+         #     self.pdf_view.setGraphicsEffect(self.opacity_effect)
+         #     
+         #     # 创建淡入动画
+         #     self.fade_animation = QPropertyAnimation(self.opacity_effect, b"opacity")
+         #     self.fade_animation.setDuration(300)  # 300ms淡入
+         #     self.fade_animation.setStartValue(0.0)
+         #     self.fade_animation.setEndValue(1.0)
+         #     self.fade_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+         #     
+         #     # 启动动画
+         #     self.fade_animation.start()
+         #     
+         # except Exception as e:
+         #     print(f"淡入效果失败: {e}")
+         #     # 如果动画失败，确保PDF视图仍然可见
+         #     self.pdf_view.setGraphicsEffect(None)
+    
+    def _refresh_pdf_view(self):
+        """刷新PDF视图显示"""
+        try:
+            # 强制更新PDF视图
+            self.pdf_view.update()
+            self.pdf_view.repaint()
+            
+            # 确保PDF视图获得焦点
+            self.pdf_view.setFocus()
+            
+            # 触发整个窗口重绘
+            self.update()
+            self.repaint()
+            
+            print("PDF视图已刷新")
+        except Exception as e:
+            print(f"刷新PDF视图失败: {e}")
     
     def reset_to_placeholder(self):
         """重置到占位符状态"""
@@ -540,6 +662,13 @@ class PDFWidget(QWidget):
     def fit_page(self):
         """适应页面"""
         self.pdf_view.fit_page()
+    
+    def showEvent(self, event):
+        """显示事件处理"""
+        super().showEvent(event)
+        # 当PDFWidget显示时，确保PDF视图也能正确显示
+        if self.stacked_widget.currentIndex() == 1:  # PDF视图激活
+            QTimer.singleShot(100, self._refresh_pdf_view)
             
     def cleanup(self):
         """清理资源"""
