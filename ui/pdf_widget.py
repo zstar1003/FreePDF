@@ -3,13 +3,15 @@
 import os
 import urllib.parse
 
-from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtWebEngineCore import QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import (
     QLabel,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
+    QGraphicsOpacityEffect,
 )
 
 
@@ -49,6 +51,7 @@ class WebPDFView(QWebEngineView):
         self.pdf_path = None
         self.current_page = 0
         self.total_pages = 0
+        self._is_preloaded = False
         
         # 监听页面加载完成
         self.loadFinished.connect(self._on_load_finished)
@@ -56,45 +59,144 @@ class WebPDFView(QWebEngineView):
         # 页面变化检测定时器
         self.page_timer = QTimer()
         self.page_timer.timeout.connect(self._check_current_page)
-        self.page_timer.setInterval(500)  # 每500ms检查一次
+        self.page_timer.setInterval(1000)  # 减少检查频率到每1000ms检查一次
+        
+        # 启动预加载
+        self._preload_webengine()
+        
+    def _preload_webengine(self):
+        """预加载WebEngine环境"""
+        # 创建一个空的HTML页面来预热WebEngine
+        preload_html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>PDF Viewer Ready</title>
+            <style>
+                body {
+                    margin: 0;
+                    padding: 0;
+                    background: #f5f5f5;
+                    font-family: Arial, sans-serif;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100vh;
+                }
+                .ready-message {
+                    color: #666;
+                    font-size: 14px;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="ready-message">PDF查看器已就绪...</div>
+            <script>
+                // 预加载PDF相关的JavaScript环境
+                window.pdfCurrentPage = 1;
+                window.pdfTotalPages = 1;
+                window.selectedText = '';
+                
+                // 定义PDF相关函数，提前准备JavaScript环境
+                window.preparePDFEnvironment = function() {
+                    console.log('PDF environment prepared');
+                };
+                
+                // 调用准备函数
+                window.preparePDFEnvironment();
+            </script>
+        </body>
+        </html>
+        """
+        
+        self.setHtml(preload_html)
+        print("WebEngine预加载已启动...")
         
     def load_pdf(self, file_path):
         """加载PDF文件"""
         try:
             if not os.path.exists(file_path):
                 return False
+            
+            # 如果WebEngine还未预加载完成，等待预加载
+            if not self._is_preloaded:
+                print("等待WebEngine预加载完成...")
+                # 使用QTimer等待预加载完成
+                def check_preload():
+                    if self._is_preloaded:
+                        self._do_load_pdf(file_path)
+                    else:
+                        QTimer.singleShot(100, check_preload)
+                QTimer.singleShot(100, check_preload)
+                return True
+            else:
+                return self._do_load_pdf(file_path)
                 
+        except Exception as e:
+            print(f"加载PDF失败: {e}")
+            return False
+    
+    def _do_load_pdf(self, file_path):
+        """执行实际的PDF加载"""
+        try:
             self.pdf_path = file_path
             
             # 将文件路径转换为file:// URL
             file_url = QUrl.fromLocalFile(os.path.abspath(file_path))
             
-            # 加载PDF文件
+            # 由于WebEngine已经预加载，这里的加载会更快
             self.load(file_url)
             
             return True
             
         except Exception as e:
-            print(f"加载PDF失败: {e}")
+            print(f"执行PDF加载失败: {e}")
             return False
     
-
+    def _apply_fade_in_effect(self):
+        """应用淡入效果"""
+        try:
+            # 创建透明度效果
+            self.opacity_effect = QGraphicsOpacityEffect()
+            self.setGraphicsEffect(self.opacity_effect)
+            
+            # 创建淡入动画
+            self.fade_animation = QPropertyAnimation(self.opacity_effect, b"opacity")
+            self.fade_animation.setDuration(300)  # 300ms淡入
+            self.fade_animation.setStartValue(0.0)
+            self.fade_animation.setEndValue(1.0)
+            self.fade_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+            
+            # 启动动画
+            self.fade_animation.start()
+            
+        except Exception as e:
+            print(f"淡入效果失败: {e}")
+            # 如果动画失败，确保PDF视图仍然可见
+            self.setGraphicsEffect(None)
     
     def _on_load_finished(self, success):
         """页面加载完成"""
-        if success and self.pdf_path:
-            print(f"PDF加载成功: {self.pdf_path}")
-            
-            # 启动页面检测
-            self.page_timer.start()
-            
-            # 注入JavaScript来获取PDF信息和监听页面变化
-            self._inject_pdf_scripts()
-            
-            # 延迟执行简单的适应宽度设置，让PDF先完全加载
-            QTimer.singleShot(2000, self._set_fit_width)
+        if success:
+            if not self._is_preloaded and not self.pdf_path:
+                # 预加载完成
+                self._is_preloaded = True
+                print("WebEngine预加载完成，组件已就绪")
+            elif self.pdf_path:
+                # PDF加载完成
+                print(f"PDF加载成功: {self.pdf_path}")
+                
+                # 启动页面检测
+                self.page_timer.start()
+                
+                # 注入JavaScript来获取PDF信息和监听页面变化
+                self._inject_pdf_scripts()
+                
+                # 减少延迟时间，让PDF更快适应宽度
+                QTimer.singleShot(300, self._set_fit_width)
         else:
-            print("PDF加载失败")
+            print("页面加载失败")
     
     def _inject_pdf_scripts(self):
         """注入JavaScript脚本"""
@@ -297,10 +399,19 @@ class WebPDFView(QWebEngineView):
                 if (plugin && plugin.contentWindow && plugin.contentWindow.PDFViewerApplication) {
                     const app = plugin.contentWindow.PDFViewerApplication;
                     
-                    // 只设置适应宽度，不做其他操作
-                    if (app.pdfViewer) {
+                    // 确保PDF已完全加载后再设置缩放
+                    if (app.pdfDocument && app.pdfViewer) {
+                        // 平滑设置适应宽度，避免突然的视觉变化
                         app.pdfViewer.currentScaleValue = 'page-width';
-                        console.log('PDF已设置为适应宽度');
+                        console.log('PDF已平滑设置为适应宽度');
+                    } else {
+                        // 如果PDF还未完全加载，再等一会儿
+                        setTimeout(function() {
+                            if (app.pdfDocument && app.pdfViewer) {
+                                app.pdfViewer.currentScaleValue = 'page-width';
+                                console.log('PDF延迟设置为适应宽度');
+                            }
+                        }, 200);
                     }
                 }
             } catch (e) {
@@ -333,17 +444,16 @@ class PDFWidget(QWidget):
         super().__init__(parent)
         self.doc = None
         
-        # 创建布局
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        # 创建主布局
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
         
-        # 创建PDF视图
-        self.pdf_view = WebPDFView()
+        # 使用QStackedWidget来避免布局重排
+        self.stacked_widget = QStackedWidget()
+        main_layout.addWidget(self.stacked_widget)
         
-        # 占位符
-        self.placeholder = QLabel(
-            "请打开PDF文件"
-        )
+        # 创建占位符页面
+        self.placeholder = QLabel("请打开PDF文件")
         self.placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.placeholder.setStyleSheet("""
             QLabel { 
@@ -357,8 +467,15 @@ class PDFWidget(QWidget):
             }
         """)
         
+        # 创建PDF视图页面
+        self.pdf_view = WebPDFView()
+        
+        # 添加到堆叠组件
+        self.stacked_widget.addWidget(self.placeholder)  # 索引0: 占位符
+        self.stacked_widget.addWidget(self.pdf_view)      # 索引1: PDF视图
+        
         # 默认显示占位符
-        layout.addWidget(self.placeholder)
+        self.stacked_widget.setCurrentIndex(0)
         
         # 连接信号
         self.pdf_view.text_selected.connect(self.text_selected.emit)
@@ -373,11 +490,11 @@ class PDFWidget(QWidget):
             success = self.pdf_view.load_pdf(file_path)
             
             if success:
-                # 切换到PDF视图
-                layout = self.layout()
-                layout.removeWidget(self.placeholder)
-                self.placeholder.hide()
-                layout.addWidget(self.pdf_view)
+                # 平滑切换到PDF视图，没有布局重排
+                self.stacked_widget.setCurrentIndex(1)
+                
+                # 添加淡入效果，进一步减少突兀感
+                self._apply_fade_in_effect()
                 
                 # 保存文档引用以兼容旧代码
                 try:
@@ -394,6 +511,35 @@ class PDFWidget(QWidget):
         except Exception as e:
             print(f"加载PDF失败: {e}")
             return False
+    
+    def _apply_fade_in_effect(self):
+        """应用淡入效果"""
+        try:
+            # 创建透明度效果
+            self.opacity_effect = QGraphicsOpacityEffect()
+            self.pdf_view.setGraphicsEffect(self.opacity_effect)
+            
+            # 创建淡入动画
+            self.fade_animation = QPropertyAnimation(self.opacity_effect, b"opacity")
+            self.fade_animation.setDuration(300)  # 300ms淡入
+            self.fade_animation.setStartValue(0.0)
+            self.fade_animation.setEndValue(1.0)
+            self.fade_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+            
+            # 启动动画
+            self.fade_animation.start()
+            
+        except Exception as e:
+            print(f"淡入效果失败: {e}")
+            # 如果动画失败，确保PDF视图仍然可见
+            self.pdf_view.setGraphicsEffect(None)
+    
+    def reset_to_placeholder(self):
+        """重置到占位符状态"""
+        self.stacked_widget.setCurrentIndex(0)
+        if self.doc:
+            self.doc.close()
+            self.doc = None
     
     def go_to_page(self, page_num):
         """跳转到指定页面"""

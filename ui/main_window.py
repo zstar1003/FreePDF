@@ -49,6 +49,9 @@ class MainWindow(QMainWindow):
         self.setup_status_bar()
         self.setup_connections()
         
+        # 预热PDF组件，确保WebEngine提前初始化
+        self._preheat_pdf_components()
+        
     def setup_ui(self):
         """设置UI界面"""
         central_widget = QWidget()
@@ -237,8 +240,7 @@ class MainWindow(QMainWindow):
                 
 
                 
-                # 隐藏右侧占位符并显示加载动画
-                self.right_pdf_widget.placeholder.hide()
+                # 显示加载动画（不需要隐藏占位符，会被QStackedWidget自动管理）
                 self.show_loading_centered("正在准备翻译...")
                 
                 # 开始翻译
@@ -253,6 +255,8 @@ class MainWindow(QMainWindow):
     def show_loading_centered(self, message):
         """显示居中的加载动画"""
         self.loading_widget.set_message(message)
+        # 先隐藏右侧PDF视图，避免加载过程中的视觉干扰
+        self.right_pdf_widget.pdf_view.hide()
         self.loading_widget.show()
         
         # 使用QTimer延迟执行居中定位，确保布局已完成
@@ -311,13 +315,10 @@ class MainWindow(QMainWindow):
             # 记录翻译文件
             self.translation_manager.set_translated_file(self.current_file, translated_file)
             
-            # 加载翻译后的文件到右侧
+            # 先隐藏加载动画，然后加载翻译后的文件到右侧
+            self.loading_widget.hide()
+            
             if self.right_pdf_widget.load_pdf(translated_file):
-                # 隐藏加载动画
-                self.loading_widget.hide()
-                
-
-                
                 # 启用同步滚动
                 self.sync_scroll.set_enabled(True)
                 
@@ -338,15 +339,8 @@ class MainWindow(QMainWindow):
             # 隐藏加载动画
             self.loading_widget.hide()
             
-            # 恢复显示右侧占位符
-            self.right_pdf_widget.placeholder.show()
-            
-            # 切换回占位符显示（修复这里）
-            layout = self.right_pdf_widget.layout()
-            if self.right_pdf_widget.pdf_view in [layout.itemAt(i).widget() for i in range(layout.count())]:
-                layout.removeWidget(self.right_pdf_widget.pdf_view)
-                self.right_pdf_widget.pdf_view.hide()
-                layout.addWidget(self.right_pdf_widget.placeholder)
+            # 使用新的重置方法，平滑切换回占位符
+            self.right_pdf_widget.reset_to_placeholder()
             
             # 显示错误状态
             self.status_label.set_status(f"翻译失败: {error_message}", "error")
@@ -399,3 +393,29 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'loading_widget') and self.loading_widget.isVisible():
             # 延迟执行居中，确保布局调整完成
             QTimer.singleShot(50, self.center_loading_widget) 
+
+    def _preheat_pdf_components(self):
+        """预热PDF组件，确保WebEngine提前初始化"""
+        try:
+            # 提前触发左右两个PDF组件的WebEngine初始化
+            # 这会启动预加载过程，让WebEngine提前准备好
+            
+            # 强制触发WebEngine的初始化，但不显示
+            temp_geometry = self.left_pdf_widget.pdf_view.geometry()
+            temp_geometry2 = self.right_pdf_widget.pdf_view.geometry()
+            
+            # 设置一个很小的大小来触发渲染管道初始化，但不影响用户界面
+            self.left_pdf_widget.pdf_view.resize(1, 1)
+            self.right_pdf_widget.pdf_view.resize(1, 1)
+            
+            # 延迟恢复正常大小
+            def restore_size():
+                self.left_pdf_widget.pdf_view.resize(temp_geometry.size())
+                self.right_pdf_widget.pdf_view.resize(temp_geometry2.size())
+            
+            QTimer.singleShot(500, restore_size)
+            
+            print("PDF组件预热已启动，WebEngine初始化中...")
+            
+        except Exception as e:
+            print(f"PDF组件预热失败: {e}") 
