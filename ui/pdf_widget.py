@@ -23,15 +23,6 @@ class WebPDFView(QWebEngineView):
     def __init__(self):
         super().__init__()
         
-        # 创建一个模拟的滚动条来兼容旧的API
-        from PyQt6.QtWidgets import QScrollBar
-        self._mock_vertical_scrollbar = QScrollBar(Qt.Orientation.Vertical)
-        self._mock_horizontal_scrollbar = QScrollBar(Qt.Orientation.Horizontal)
-        
-        # 设置不可见
-        self._mock_vertical_scrollbar.hide()
-        self._mock_horizontal_scrollbar.hide()
-        
         # 配置WebEngine设置
         settings = self.settings()
         settings.setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, True)
@@ -421,14 +412,6 @@ class WebPDFView(QWebEngineView):
         """
         self.page().runJavaScript(js_code)
     
-    def verticalScrollBar(self):
-        """返回模拟的垂直滚动条以兼容旧API"""
-        return self._mock_vertical_scrollbar
-    
-    def horizontalScrollBar(self):
-        """返回模拟的水平滚动条以兼容旧API"""
-        return self._mock_horizontal_scrollbar
-    
     def cleanup(self):
         """清理资源"""
         self.page_timer.stop()
@@ -480,9 +463,6 @@ class PDFWidget(QWidget):
         # 连接信号
         self.pdf_view.text_selected.connect(self.text_selected.emit)
         self.pdf_view.page_changed.connect(self.page_changed.emit)
-        
-        # 为了兼容旧代码，添加scroll_area属性指向pdf_view
-        self.scroll_area = self.pdf_view
         
     def load_pdf(self, file_path):
         """加载PDF文件"""

@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.translation import TranslationManager
-from ui.components import LoadingWidget, StatusLabel, SyncScrollArea
+from ui.components import LoadingWidget, StatusLabel
 from ui.pdf_widget import PDFWidget
 
 
@@ -156,12 +156,6 @@ class MainWindow(QMainWindow):
         
         main_layout.addWidget(self.splitter)
         
-        # 设置同步滚动
-        self.sync_scroll = SyncScrollArea(
-            self.left_pdf_widget.scroll_area, 
-            self.right_pdf_widget.scroll_area
-        )
-        
     def setup_menu(self):
         """设置菜单"""
         menubar = self.menuBar()
@@ -180,15 +174,6 @@ class MainWindow(QMainWindow):
         exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
-        
-        # 视图菜单
-        view_menu = menubar.addMenu("视图")
-        
-        sync_action = QAction("同步滚动", self)
-        sync_action.setCheckable(True)
-        sync_action.setChecked(True)
-        sync_action.triggered.connect(self.toggle_sync_scroll)
-        view_menu.addAction(sync_action)
         
     def setup_status_bar(self):
         """设置状态栏"""
@@ -319,9 +304,6 @@ class MainWindow(QMainWindow):
             self.loading_widget.hide()
             
             if self.right_pdf_widget.load_pdf(translated_file):
-                # 启用同步滚动
-                self.sync_scroll.set_enabled(True)
-                
                 filename = os.path.basename(translated_file)
                 self.status_label.set_status(f"翻译完成: {filename}", "success")
             else:
@@ -370,11 +352,6 @@ class MainWindow(QMainWindow):
         """文本选中"""
         if text.strip():
             self.status_label.set_status(f"已选择文本: {text[:50]}...", "info")
-            
-    @pyqtSlot(bool)
-    def toggle_sync_scroll(self, enabled):
-        """切换同步滚动"""
-        self.sync_scroll.set_enabled(enabled)
         
     def closeEvent(self, event):
         """关闭事件"""
