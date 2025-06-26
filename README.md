@@ -9,11 +9,18 @@
 一个免费的PDF文献翻译工具，让看英文文献像喝水一样简单。
 
 
+## 🏗️ 效果演示
+
+[![FreePDF：让看英文文献像喝水一样简单](https://i0.hdslb.com/bfs/archive/43c920704c379c27424211f3edfc1657369dfd66.jpg@672w_378h_1c.avif)](https://www.bilibili.com/video/BV1hcKfzEE9e)
+
+
 ## 📦 使用方式
 
 - windows 用户:
 
-  直接下载安装包：https://pan.baidu.com/s/1vhrZLiiwBQuWJ4PZ0bJQ_w?pwd=8888 (提取码: 8888)
+  直接下载安装包：https://github.com/zstar1003/FreePDF/releases/download/v1.0.0/FreePDF_Setup.exe
+
+  备用链接：https://pan.baidu.com/s/1vhrZLiiwBQuWJ4PZ0bJQ_w?pwd=8888 (提取码: 8888)
 
 - 其它系统用户:
 
