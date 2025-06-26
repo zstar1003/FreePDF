@@ -196,9 +196,7 @@ class MainWindow(QMainWindow):
         self.status_label = StatusLabel()
         self.status_bar.addWidget(self.status_label)
         
-        # 页面信息
-        self.page_info_label = QLabel("无文档")
-        self.status_bar.addPermanentWidget(self.page_info_label)
+        # 页面信息已移除，使用更简洁的状态栏
         
     def setup_connections(self):
         """设置信号连接"""
@@ -235,10 +233,7 @@ class MainWindow(QMainWindow):
                 filename = os.path.basename(file_path)
                 self.status_label.set_status(f"已加载: {filename}", "success")
                 
-                # 更新页面信息
-                if self.left_pdf_widget.doc:
-                    total_pages = self.left_pdf_widget.doc.page_count
-                    self.page_info_label.setText(f"共 {total_pages} 页")
+                # 页面信息显示已移除，保持界面简洁
                 
 
                 
@@ -373,9 +368,8 @@ class MainWindow(QMainWindow):
     @pyqtSlot(int)
     def on_page_changed(self, page_num):
         """页面改变"""
-        if self.left_pdf_widget.doc:
-            total_pages = self.left_pdf_widget.doc.page_count
-            self.page_info_label.setText(f"第 {page_num + 1} 页 / 共 {total_pages} 页")
+        # 页面信息显示已移除，保持界面简洁
+        pass
             
     @pyqtSlot(str)
     def on_text_selected(self, text):

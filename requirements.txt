@@ -1,3 +1,4 @@
 PyQt6
+PyQt6-WebEngine
 pdf2zh
 PyMuPDF

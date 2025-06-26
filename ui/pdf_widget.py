@@ -1,666 +1,327 @@
-"""PDF显示组件"""
+"""PDF显示组件 - 基于Web渲染"""
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QPainter
+import os
+import urllib.parse
+
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
+from PyQt6.QtWebEngineCore import QWebEngineSettings
+from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import (
-    QApplication,
-    QGraphicsPixmapItem,
-    QGraphicsScene,
-    QGraphicsView,
     QLabel,
     QVBoxLayout,
     QWidget,
 )
 
-from core.pdf_document import PageCache
-from core.render_thread import PageRenderThread
-from core.text_selection import TextSelection
-from utils.constants import (
-    DEFAULT_DPI,
-    DEFAULT_ZOOM,
-    HIGH_QUALITY_DPI,
-    MAX_PAGE_WIDTH,
-    PAGE_SPACING,
-    PLACEHOLDER_COLOR,
-    PRELOAD_DELAY,
-    PRELOAD_DISTANCE,
-    VIEWPORT_BUFFER,
-)
 
-
-class PageGraphicsItem(QGraphicsPixmapItem):
-    """PDF页面图形项"""
-    
-    def __init__(self, page_num, pixmap=None):
-        super().__init__(pixmap)
-        self.page_num = page_num
-        self.is_placeholder = pixmap is None
-        self.base_zoom = DEFAULT_ZOOM
-        
-    def set_pixmap(self, pixmap):
-        """设置页面像素图"""
-        self.setPixmap(pixmap)
-        self.is_placeholder = False
-        
-    def set_placeholder(self, width, height):
-        """设置占位符"""
-        from PyQt6.QtGui import QPainter, QPixmap
-        
-        placeholder = QPixmap(width, height)
-        placeholder.fill(QColor(*PLACEHOLDER_COLOR))
-        
-        painter = QPainter(placeholder)
-        painter.setPen(QColor(120, 120, 120))
-        painter.setFont(QFont("Arial", 12))
-        painter.drawText(placeholder.rect(), Qt.AlignmentFlag.AlignCenter, 
-                        f"加载中... ({self.page_num + 1})")
-        painter.end()
-        
-        self.setPixmap(placeholder)
-        self.is_placeholder = True
-
-
-class SmoothPDFView(QGraphicsView):
-    """PDF视图"""
-    text_selected = pyqtSignal(str)
+class WebPDFView(QWebEngineView):
+    """基于Web的PDF视图"""
     page_changed = pyqtSignal(int)
+    text_selected = pyqtSignal(str)
     
     def __init__(self):
         super().__init__()
         
-        # 基础设置
-        self.setDragMode(QGraphicsView.DragMode.NoDrag)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        self.setOptimizationFlag(QGraphicsView.OptimizationFlag.DontAdjustForAntialiasing)
-        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.BoundingRectViewportUpdate)
+        # 创建一个模拟的滚动条来兼容旧的API
+        from PyQt6.QtWidgets import QScrollBar
+        self._mock_vertical_scrollbar = QScrollBar(Qt.Orientation.Vertical)
+        self._mock_horizontal_scrollbar = QScrollBar(Qt.Orientation.Horizontal)
         
-        # 样式设置，类似原来的scroll_area样式
+        # 设置不可见
+        self._mock_vertical_scrollbar.hide()
+        self._mock_horizontal_scrollbar.hide()
+        
+        # 配置WebEngine设置
+        settings = self.settings()
+        settings.setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.PdfViewerEnabled, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
+        
+        # 设置样式，包含强制隐藏PDF工具栏的CSS
         self.setStyleSheet("""
-            QGraphicsView {
+            QWebEngineView {
                 border: none;
                 background-color: #f5f5f5;
             }
-            QScrollBar:vertical {
-                border: none;
-                background: #f0f0f0;
-                width: 12px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background: #c0c0c0;
-                border-radius: 6px;
-                min-height: 20px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #a0a0a0;
-            }
         """)
         
-        # 创建场景
-        self.scene = QGraphicsScene()
-        self.setScene(self.scene)
+        self.pdf_path = None
+        self.current_page = 0
+        self.total_pages = 0
         
-        # PDF相关
-        self.pdf_doc = None
-        self.page_cache = PageCache()
-        self.page_items = []  # 页面图形项列表
-        self.page_heights = []
-        self.page_positions = []
+        # 监听页面加载完成
+        self.loadFinished.connect(self._on_load_finished)
         
-        # 缩放设置
-        self.base_zoom = DEFAULT_ZOOM
-        self.current_zoom = DEFAULT_ZOOM
+        # 页面变化检测定时器
+        self.page_timer = QTimer()
+        self.page_timer.timeout.connect(self._check_current_page)
+        self.page_timer.setInterval(500)  # 每500ms检查一次
         
-        # 渲染管理
-        self.render_threads = {}
-        self.pending_renders = set()
-        self._is_shutting_down = False
-        
-        # 预加载计时器
-        self.preload_timer = QTimer()
-        self.preload_timer.timeout.connect(self.preload_nearby_pages)
-        self.preload_timer.setSingleShot(True)
-        
-        # 高质量渲染计时器
-        self.high_quality_timer = QTimer()
-        self.high_quality_timer.timeout.connect(self._render_high_quality)
-        self.high_quality_timer.setSingleShot(True)
-        
-        # 文本选择
-        self.text_selection = TextSelection()
-        
-        # 自适应缩放相关
-        self.auto_fit_zoom = DEFAULT_ZOOM
-        self.container_width = 800  # 默认容器宽度
-        
-        # 绑定滚动事件
-        self.verticalScrollBar().valueChanged.connect(self._on_scroll)
-        
-    def set_document(self, pdf_doc):
-        """设置PDF文档"""
-        if self._is_shutting_down:
-            return
-            
-        # 停止所有当前的渲染操作
-        self._cleanup_old_threads()
-        
-        self.pdf_doc = pdf_doc
-        if pdf_doc and pdf_doc.doc:
-            # 1. 先计算自适应缩放
-            self._calculate_auto_fit_zoom()
-            
-            # 2. 清除所有缓存，确保从头开始
-            self.page_cache.clear()
-            self.pending_renders.clear()
-            
-            # 3. 使用自适应缩放值重新设置页面布局
-            self._setup_pages()
-            
-            # 4. 延迟渲染，确保布局完成后再开始渲染
-            QTimer.singleShot(50, self._render_visible_pages)
-            
-    def _setup_pages(self):
-        """设置页面布局"""
-        if not self.pdf_doc or not self.pdf_doc.doc:
-            return
-            
-        # 保存旧的页面项（如果有的话）
-        old_page_items = {}
-        if self.page_items:
-            for i, item in enumerate(self.page_items):
-                if not item.is_placeholder and item.pixmap():
-                    old_page_items[i] = item.pixmap()
-        
-        # 清除旧的页面项
-        self.scene.clear()
-        self.page_items = []
-        self.page_heights = []
-        self.page_positions = []
-        
-        current_y = 0  # 从顶部开始，不留空间
-        # 使用当前缩放值（包括自适应缩放）
-        base_scale = self.current_zoom * (DEFAULT_DPI / 72.0)
-        
-        # 计算容器宽度用于居中
-        container_width = self.viewport().width()
-        if container_width <= 0:
-            container_width = 800  # 默认宽度
-        
-        max_page_width = 0
-        
-        for page_num in range(self.pdf_doc.total_pages):
-            page_rect = self.pdf_doc.get_page_rect(page_num)
-            if not page_rect:
-                continue
+    def load_pdf(self, file_path):
+        """加载PDF文件"""
+        try:
+            if not os.path.exists(file_path):
+                return False
                 
-            # 计算基础显示尺寸
-            display_width = int(page_rect.width * base_scale)
-            display_height = int(page_rect.height * base_scale)
+            self.pdf_path = file_path
             
-            # 限制最大宽度
-            if display_width > MAX_PAGE_WIDTH:
-                scale_ratio = MAX_PAGE_WIDTH / display_width
-                display_width = MAX_PAGE_WIDTH
-                display_height = int(display_height * scale_ratio)
+            # 将文件路径转换为file:// URL
+            file_url = QUrl.fromLocalFile(os.path.abspath(file_path))
             
-            # 记录最大页面宽度
-            max_page_width = max(max_page_width, display_width)
+            # 加载PDF文件
+            self.load(file_url)
             
-            # 计算居中的x坐标，确保页面在容器内居中
-            center_x = max(0, (container_width - display_width) / 2)
+            return True
             
-            # 创建页面图形项
-            page_item = PageGraphicsItem(page_num)
+        except Exception as e:
+            print(f"加载PDF失败: {e}")
+            return False
+    
+
+    
+    def _on_load_finished(self, success):
+        """页面加载完成"""
+        if success and self.pdf_path:
+            print(f"PDF加载成功: {self.pdf_path}")
             
-            # 检查是否有缓存的页面内容
-            if self.page_cache.has_page(page_num):
-                cached_pixmap = self.page_cache.get_page(page_num)
-                if cached_pixmap and not cached_pixmap.isNull():
-                    # 检查缓存的像素图是否适合当前尺寸
-                    cached_width = cached_pixmap.width()
-                    size_diff = abs(cached_width - display_width) / display_width
+            # 启动页面检测
+            self.page_timer.start()
+            
+            # 注入JavaScript来获取PDF信息和监听页面变化
+            self._inject_pdf_scripts()
+            
+            # 延迟执行简单的适应宽度设置，让PDF先完全加载
+            QTimer.singleShot(2000, self._set_fit_width)
+        else:
+            print("PDF加载失败")
+    
+    def _inject_pdf_scripts(self):
+        """注入JavaScript脚本"""
+        # 简化的脚本，只监听基本信息
+        js_code = """
+        (function() {
+            function checkPDFInfo() {
+                try {
+                    const plugin = document.querySelector('embed[type="application/pdf"]');
+                    if (plugin && plugin.contentWindow && plugin.contentWindow.PDFViewerApplication) {
+                        const app = plugin.contentWindow.PDFViewerApplication;
+                        if (app.pdfDocument) {
+                            window.pdfTotalPages = app.pdfDocument.numPages;
+                            window.pdfCurrentPage = app.page;
+                            return true;
+                        }
+                    }
                     
-                    if size_diff < 0.1:  # 尺寸差异小于10%，直接使用
-                        page_item.set_pixmap(cached_pixmap)
-                        display_height = cached_pixmap.height()
-                    else:
-                        # 缩放缓存的像素图到合适尺寸
-                        scaled_pixmap = cached_pixmap.scaledToWidth(
-                            display_width, Qt.TransformationMode.SmoothTransformation
-                        )
-                        page_item.set_pixmap(scaled_pixmap)
-                        display_height = scaled_pixmap.height()
-                else:
-                    # 缓存无效，创建占位符
-                    page_item.set_placeholder(display_width, display_height)
-            elif page_num in old_page_items:
-                # 尝试使用旧的页面内容
-                old_pixmap = old_page_items[page_num]
-                scaled_pixmap = old_pixmap.scaledToWidth(
-                    display_width, Qt.TransformationMode.SmoothTransformation
-                )
-                page_item.set_pixmap(scaled_pixmap)
-                display_height = scaled_pixmap.height()
-            else:
-                # 创建占位符
-                page_item.set_placeholder(display_width, display_height)
+                    // 默认值
+                    window.pdfCurrentPage = 1;
+                    window.pdfTotalPages = 1;
+                    return false;
+                } catch (e) {
+                    return false;
+                }
+            }
             
-            page_item.setPos(center_x, current_y)
+            // 定期检查PDF信息
+            setInterval(checkPDFInfo, 500);
+            checkPDFInfo();
             
-            self.scene.addItem(page_item)
-            self.page_items.append(page_item)
-            self.page_positions.append(current_y)
-            self.page_heights.append(display_height)
-            
-            # 页面间距处理
-            current_y += display_height
-            if page_num < self.pdf_doc.total_pages - 1 and PAGE_SPACING > 0:
-                current_y += PAGE_SPACING
+            // 监听文本选择
+            document.addEventListener('selectionchange', function() {
+                const selection = window.getSelection();
+                if (selection && selection.toString().trim()) {
+                    window.selectedText = selection.toString().trim();
+                }
+            });
+        })();
+        """
         
-        # 设置场景大小，确保不超出容器宽度
-        # 在自适应缩放下，页面应该正好适合容器，因此场景宽度应该等于容器宽度
-        scene_width = container_width
-        self.scene.setSceneRect(0, 0, scene_width, current_y)
-        
-        # 重新居中所有页面
-        self._center_all_pages()
+        self.page().runJavaScript(js_code)
     
-    def _center_all_pages(self):
-        """重新居中所有页面"""
-        if not self.page_items:
-            return
-            
-        container_width = self.viewport().width()
-        if container_width <= 0:
-            return
-            
-        for page_item in self.page_items:
-            current_pos = page_item.pos()
-            page_width = page_item.pixmap().width() if page_item.pixmap() else 0
-            
-            if page_width > 0:
-                # 计算新的居中x坐标，保持最小边距一致
-                center_x = max(0, (container_width - page_width) / 2)
-                page_item.setPos(center_x, current_pos.y())
-    
-    def _calculate_auto_fit_zoom(self):
-        """计算自适应缩放比例"""
-        if not self.pdf_doc or not self.pdf_doc.doc:
-            return
-        
-        # 更新容器宽度，确保页面完全适合容器
-        self.container_width = self.viewport().width()
-        
-        # 获取第一页尺寸作为参考
-        first_page_rect = self.pdf_doc.get_page_rect(0)
-        if not first_page_rect:
-            return
-        
-        # 计算适合容器宽度的缩放比例
-        page_width = first_page_rect.width
-        if page_width > 0:
-            fit_zoom = self.container_width / page_width
-            
-            self.auto_fit_zoom = fit_zoom
-            self.base_zoom = fit_zoom
-            self.current_zoom = fit_zoom
-            
-            print(f"自适应缩放: {fit_zoom:.2f}, 页面宽度: {page_width:.1f}, 容器宽度: {self.container_width}")
-        
-    def _render_high_quality(self):
-        """渲染高质量页面"""
-        if not self.pdf_doc:
-            return
-            
-        # 获取可见页面
-        visible_pages = self._get_visible_pages()
-        
-        # 停止所有正在进行的渲染
-        self._cleanup_old_threads()
-        
-        # 清除可见页面的缓存，强制重新渲染
-        for page_num in visible_pages:
-            if page_num in self.page_cache.page_cache:
-                del self.page_cache.page_cache[page_num]
-                
-        # 重新渲染可见页面，使用高质量
-        for page_num in visible_pages:
-            if (page_num not in self.pending_renders and
-                not self._is_shutting_down):
-                self._render_page(page_num, high_quality=True)
-        
-    def _get_visible_pages(self):
-        """获取可见页面"""
-        visible_pages = []
-        viewport_rect = self.mapToScene(self.viewport().rect()).boundingRect()
-        
-        for i, (page_y, page_height) in enumerate(zip(self.page_positions, self.page_heights)):
-            page_bottom = page_y + page_height
-            
-            if (page_y - VIEWPORT_BUFFER) < viewport_rect.bottom() and \
-               (page_bottom + VIEWPORT_BUFFER) > viewport_rect.top():
-                visible_pages.append(i)
-                
-        return visible_pages
-        
-    def _render_visible_pages(self):
-        """渲染可见页面"""
-        if self._is_shutting_down:
-            return
-            
-        visible_pages = self._get_visible_pages()
-        
-        for page_num in visible_pages:
-            # 检查页面是否需要渲染
-            needs_render = False
-            
-            if page_num < len(self.page_items):
-                page_item = self.page_items[page_num]
-                # 如果是占位符，需要渲染
-                if page_item.is_placeholder:
-                    needs_render = True
-                # 如果没有缓存，也需要渲染
-                elif not self.page_cache.has_page(page_num):
-                    needs_render = True
-                # 如果缓存的尺寸与当前需要的尺寸差异较大，需要重新渲染
-                elif self.page_cache.has_page(page_num):
-                    cached_pixmap = self.page_cache.get_page(page_num)
-                    if cached_pixmap and not cached_pixmap.isNull() and page_item.pixmap():
-                        current_width = page_item.pixmap().width()
-                        cached_width = cached_pixmap.width()
-                        size_diff = abs(current_width - cached_width) / max(current_width, 1)
-                        # 如果尺寸差异超过20%，重新渲染
-                        if size_diff > 0.2:
-                            needs_render = True
-            
-            if (needs_render and 
-                page_num not in self.pending_renders and
-                not self._is_shutting_down):
-                self._render_page(page_num)
-        
-        # 启动预加载
-        if not self._is_shutting_down:
-            self.preload_timer.start(PRELOAD_DELAY)
-            
-    def _render_page(self, page_num, high_quality=True):
-        """渲染指定页面"""
-        if (self._is_shutting_down or 
-            page_num in self.pending_renders or 
-            page_num in self.render_threads):
-            return
-            
-        self.pending_renders.add(page_num)
-        
-        # 计算当前缩放下的渲染尺寸
-        effective_zoom = self.current_zoom
-        
-        # 使用更高的DPI获得更好的质量
-        render_dpi = HIGH_QUALITY_DPI if high_quality else DEFAULT_DPI
-        
-        thread = PageRenderThread(
-            self.pdf_doc.doc, page_num, 
-            effective_zoom, render_dpi, 
-            target_width=self.container_width,
-            high_quality=high_quality,
-            parent=self
+    def _check_current_page(self):
+        """检查当前页面"""
+        # 通过JavaScript获取当前页面信息
+        self.page().runJavaScript(
+            "window.pdfCurrentPage || 1",
+            self._on_current_page_result
         )
         
-        # 连接信号
-        thread.page_rendered.connect(self._on_page_rendered)
-        thread.preview_rendered.connect(self._on_preview_rendered)
-        thread.finished.connect(lambda: self._on_thread_finished(page_num))
+        self.page().runJavaScript(
+            "window.pdfTotalPages || 1",
+            self._on_total_pages_result
+        )
         
-        self.render_threads[page_num] = thread
-        thread.start()
-        
-    def _on_page_rendered(self, page_num, pixmap, text_words):
-        """页面渲染完成"""
-        if self._is_shutting_down or page_num >= len(self.page_items):
-            return
-            
-        # 缓存渲染结果
-        self.page_cache.set_page(page_num, pixmap, text_words)
-        
-        # 更新页面图形项
-        page_item = self.page_items[page_num]
-        old_height = self.page_heights[page_num] if page_num < len(self.page_heights) else 0
-        
-        page_item.set_pixmap(pixmap)
-        
-        # 检查实际渲染的页面高度是否与预期不同
-        actual_height = pixmap.height()
-        if abs(actual_height - old_height) > 1:  # 高度差超过1像素则需要重新布局
-            print(f"页面 {page_num} 高度调整: {old_height} -> {actual_height}")
-            self._update_page_layout_from(page_num)
-        else:
-            # 只需要重新居中该页面
-            self._center_page(page_item)
-        
-        # 更新文本选择
-        self._update_visible_words()
+        # 检查选中的文本
+        self.page().runJavaScript(
+            "window.selectedText || ''",
+            self._on_selected_text_result
+        )
     
-    def _on_preview_rendered(self, page_num, pixmap):
-        """预览渲染完成（快速低质量版本）"""
-        if self._is_shutting_down or page_num >= len(self.page_items):
-            return
-            
-        # 只有当没有高质量版本时才显示预览
-        if not self.page_cache.has_page(page_num):
-            page_item = self.page_items[page_num]
-            old_height = self.page_heights[page_num] if page_num < len(self.page_heights) else 0
-            
-            page_item.set_pixmap(pixmap)
-            
-            # 检查实际渲染的页面高度是否与预期不同
-            actual_height = pixmap.height()
-            if abs(actual_height - old_height) > 1:  # 高度差超过1像素则需要重新布局
-                self._update_page_layout_from(page_num)
-            else:
-                # 只需要重新居中该页面
-                self._center_page(page_item)
-        
-    def _update_page_layout_from(self, start_page_num):
-        """从指定页面开始重新计算和更新页面布局"""
-        if not self.page_items or start_page_num >= len(self.page_items):
-            return
-            
-        # 更新指定页面的高度
-        page_item = self.page_items[start_page_num]
-        if page_item.pixmap():
-            self.page_heights[start_page_num] = page_item.pixmap().height()
-        
-        # 重新计算从该页面开始的所有页面位置
-        if start_page_num == 0:
-            current_y = 0
-        else:
-            # 从前一页的底部开始
-            prev_page_bottom = self.page_positions[start_page_num - 1] + self.page_heights[start_page_num - 1]
-            current_y = prev_page_bottom + (PAGE_SPACING if PAGE_SPACING > 0 else 0)
-        
-        container_width = self.viewport().width()
-        
-        # 更新从start_page_num开始的所有页面位置
-        for i in range(start_page_num, len(self.page_items)):
-            page_item = self.page_items[i]
-            
-            # 更新页面位置
-            self.page_positions[i] = current_y
-            
-            # 重新居中页面
-            if page_item.pixmap():
-                page_width = page_item.pixmap().width()
-                center_x = max(0, (container_width - page_width) / 2)
-                page_item.setPos(center_x, current_y)
-                
-                # 更新页面高度（如果已渲染）
-                self.page_heights[i] = page_item.pixmap().height()
-            
-            # 计算下一页的y位置
-            current_y += self.page_heights[i]
-            if i < len(self.page_items) - 1 and PAGE_SPACING > 0:
-                current_y += PAGE_SPACING
-        
-        # 更新场景大小
-        scene_width = container_width
-        self.scene.setSceneRect(0, 0, scene_width, current_y)
+    def _on_current_page_result(self, page):
+        """当前页面结果"""
+        try:
+            new_page = int(page) if page else 1
+            if new_page != self.current_page:
+                self.current_page = new_page
+                self.page_changed.emit(self.current_page - 1)  # 转换为0基索引
+        except (ValueError, TypeError):
+            pass
     
-    def _center_page(self, page_item):
-        """居中单个页面"""
-        current_pos = page_item.pos()
-        page_width = page_item.pixmap().width() if page_item.pixmap() else 0
-        
-        if page_width > 0:
-            container_width = self.viewport().width()
-            center_x = max(0, (container_width - page_width) / 2)
-            page_item.setPos(center_x, current_pos.y())
-         
-    def _on_thread_finished(self, page_num):
-        """线程完成清理"""
-        self.pending_renders.discard(page_num)
-        if page_num in self.render_threads:
-            thread = self.render_threads.pop(page_num)
-            QTimer.singleShot(100, thread.deleteLater)
-        
-    def preload_nearby_pages(self):
-        """预加载附近页面"""
-        if not self.pdf_doc or self._is_shutting_down:
-            return
-            
-        current_page = self._get_current_page()
-        
-        for offset in range(-PRELOAD_DISTANCE, PRELOAD_DISTANCE + 1):
-            if offset == 0:
-                continue
-                
-            page_num = current_page + offset
-            if (0 <= page_num < self.pdf_doc.total_pages and 
-                not self.page_cache.has_page(page_num) and 
-                page_num not in self.pending_renders and
-                not self._is_shutting_down):
-                # 预加载页面使用快速渲染
-                self._render_page(page_num, high_quality=False)
-                
-    def _get_current_page(self):
-        """获取当前页面"""
-        viewport_center = self.mapToScene(self.viewport().rect().center())
-        
-        for i, page_y in enumerate(self.page_positions):
-            if i < len(self.page_heights):
-                page_bottom = page_y + self.page_heights[i]
-                if page_y <= viewport_center.y() <= page_bottom:
-                    return i
-        return 0
-        
-    def _on_scroll(self):
-        """滚动事件"""
-        if not self._is_shutting_down:
-            self._render_visible_pages()
-            
-            current_page = self._get_current_page()
-            self.page_changed.emit(current_page)
-            
-    def _update_visible_words(self):
-        """更新可见文本单词"""
-        # TODO: 实现文本选择功能
-        pass
-        
-    def wheelEvent(self, event):
-        """滚轮事件 - 仅支持正常滚动"""
-        # 只支持正常滚动，不支持缩放
-        super().wheelEvent(event)
-
-    def _render_placeholder_pages(self):
-        """渲染占位符页面"""
-        if self._is_shutting_down:
-            return
-            
-        # 找到所有占位符页面并渲染
-        for i, page_item in enumerate(self.page_items):
-            if page_item.is_placeholder and i not in self.pending_renders:
-                self._render_page(i, high_quality=True)
-
-    def _restore_scroll_position(self, ratio_x, ratio_y):
-        """恢复滚动位置"""
-        h_bar = self.horizontalScrollBar()
-        v_bar = self.verticalScrollBar()
-        
-        if h_bar.maximum() > 0:
-            h_bar.setValue(int(ratio_x * h_bar.maximum()))
-        if v_bar.maximum() > 0:
-            v_bar.setValue(int(ratio_y * v_bar.maximum()))
-
-    def _cleanup_old_threads(self):
-        """清理旧线程"""
-        if self._is_shutting_down:
-            return
-            
-        # 停止所有正在运行的线程
-        for page_num, thread in list(self.render_threads.items()):
-            if thread.isRunning():
-                thread.stop()  # 停止渲染
-        
-        # 清理已完成的线程
-        finished_threads = []
-        for page_num, thread in list(self.render_threads.items()):
-            if not thread.isRunning():
-                finished_threads.append(page_num)
-        
-        for page_num in finished_threads:
-            if page_num in self.render_threads:
-                thread = self.render_threads.pop(page_num)
-                QTimer.singleShot(100, thread.deleteLater)
-                
-        # 清空pending renders
-        self.pending_renders.clear()
+    def _on_total_pages_result(self, total):
+        """总页数结果"""
+        try:
+            self.total_pages = int(total) if total else 1
+        except (ValueError, TypeError):
+            pass
     
-    def cleanup_threads(self):
-        """完全清理线程"""
-        print("开始清理PDF视图线程...")
-        self._is_shutting_down = True
-        
-        # 停止计时器
-        self.preload_timer.stop()
-        self.high_quality_timer.stop()
-        
-        # 停止所有线程
-        active_threads = []
-        for page_num, thread in list(self.render_threads.items()):
-            if thread.isRunning():
-                print(f"停止线程 {page_num}")
-                thread.stop()
-                active_threads.append(thread)
-        
-        # 等待线程完成
-        for thread in active_threads:
-            if not thread.wait(2000):
-                print(f"强制终止线程 {thread.page_num}")
-                thread.terminate()
-                thread.wait(1000)
-        
-        # 清理所有引用
-        self.render_threads.clear()
-        self.pending_renders.clear()
-        
-        print("PDF视图线程清理完成")
+    def _on_selected_text_result(self, text):
+        """选中文本结果"""
+        if text and text.strip():
+            self.text_selected.emit(text.strip())
+            # 清除JavaScript中的选中文本标记
+            self.page().runJavaScript("window.selectedText = '';")
     
-    def resizeEvent(self, event):
-        """窗口大小变化事件"""
-        super().resizeEvent(event)
+    def go_to_page(self, page_num):
+        """跳转到指定页面"""
+        # 注入JavaScript来跳转页面
+        js_code = f"""
+        (function() {{
+            try {{
+                // 尝试Chrome PDF插件方式
+                const plugin = document.querySelector('embed[type="application/pdf"]');
+                if (plugin && plugin.contentWindow && plugin.contentWindow.PDFViewerApplication) {{
+                    plugin.contentWindow.PDFViewerApplication.page = {page_num + 1};
+                    return true;
+                }}
+                
+                // 尝试PDF.js方式
+                const pageInput = document.querySelector('#pageNumber');
+                if (pageInput) {{
+                    pageInput.value = {page_num + 1};
+                    pageInput.dispatchEvent(new Event('change'));
+                    return true;
+                }}
+                
+                return false;
+            }} catch (e) {{
+                console.log('Go to page error:', e);
+                return false;
+            }}
+        }})();
+        """
         
-        # 如果有文档加载，重新计算自适应缩放和重新布局
-        if self.pdf_doc and hasattr(self, 'auto_fit_zoom') and not self._is_shutting_down:
-            old_width = self.container_width
-            self._calculate_auto_fit_zoom()
-            
-            # 只有在容器宽度显著变化时才重新布局
-            if abs(self.container_width - old_width) > 50:
-                # 重新设置整个页面布局（包括场景大小）
-                self._setup_pages()
-                # 重新渲染以获得最佳显示效果
-                self._render_visible_pages()
+        self.page().runJavaScript(js_code)
+    
+    def zoom_in(self):
+        """放大"""
+        js_code = """
+        (function() {
+            try {
+                const plugin = document.querySelector('embed[type="application/pdf"]');
+                if (plugin && plugin.contentWindow && plugin.contentWindow.PDFViewerApplication) {
+                    plugin.contentWindow.PDFViewerApplication.zoomIn();
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                console.log('Zoom in error:', e);
+                return false;
+            }
+        })();
+        """
+        self.page().runJavaScript(js_code)
+    
+    def zoom_out(self):
+        """缩小"""
+        js_code = """
+        (function() {
+            try {
+                const plugin = document.querySelector('embed[type="application/pdf"]');
+                if (plugin && plugin.contentWindow && plugin.contentWindow.PDFViewerApplication) {
+                    plugin.contentWindow.PDFViewerApplication.zoomOut();
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                console.log('Zoom out error:', e);
+                return false;
+            }
+        })();
+        """
+        self.page().runJavaScript(js_code)
+    
+    def fit_width(self):
+        """适应宽度"""
+        js_code = """
+        (function() {
+            try {
+                const plugin = document.querySelector('embed[type="application/pdf"]');
+                if (plugin && plugin.contentWindow && plugin.contentWindow.PDFViewerApplication) {
+                    plugin.contentWindow.PDFViewerApplication.pdfViewer.currentScaleValue = 'page-width';
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                console.log('Fit width error:', e);
+                return false;
+            }
+        })();
+        """
+        self.page().runJavaScript(js_code)
+    
+    def fit_page(self):
+        """适应页面"""
+        js_code = """
+        (function() {
+            try {
+                const plugin = document.querySelector('embed[type="application/pdf"]');
+                if (plugin && plugin.contentWindow && plugin.contentWindow.PDFViewerApplication) {
+                    plugin.contentWindow.PDFViewerApplication.pdfViewer.currentScaleValue = 'page-fit';
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                console.log('Fit page error:', e);
+                return false;
+            }
+        })();
+        """
+        self.page().runJavaScript(js_code)
+    
+    def _set_fit_width(self):
+        """设置PDF适应宽度"""
+        js_code = """
+        (function() {
+            try {
+                const plugin = document.querySelector('embed[type="application/pdf"]');
+                if (plugin && plugin.contentWindow && plugin.contentWindow.PDFViewerApplication) {
+                    const app = plugin.contentWindow.PDFViewerApplication;
+                    
+                    // 只设置适应宽度，不做其他操作
+                    if (app.pdfViewer) {
+                        app.pdfViewer.currentScaleValue = 'page-width';
+                        console.log('PDF已设置为适应宽度');
+                    }
+                }
+            } catch (e) {
+                console.log('设置PDF适应宽度时出错:', e);
+            }
+        })();
+        """
+        self.page().runJavaScript(js_code)
+    
+    def verticalScrollBar(self):
+        """返回模拟的垂直滚动条以兼容旧API"""
+        return self._mock_vertical_scrollbar
+    
+    def horizontalScrollBar(self):
+        """返回模拟的水平滚动条以兼容旧API"""
+        return self._mock_horizontal_scrollbar
+    
+    def cleanup(self):
+        """清理资源"""
+        self.page_timer.stop()
+        self.pdf_path = None
 
 
 class PDFWidget(QWidget):
@@ -677,7 +338,7 @@ class PDFWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         
         # 创建PDF视图
-        self.pdf_view = SmoothPDFView()
+        self.pdf_view = WebPDFView()
         
         # 占位符
         self.placeholder = QLabel(
@@ -709,19 +370,7 @@ class PDFWidget(QWidget):
     def load_pdf(self, file_path):
         """加载PDF文件"""
         try:
-            import fitz
-            
-            # 加载文档
-            doc = fitz.open(file_path)
-            if not doc or doc.page_count == 0:
-                return False
-                
-            self.doc = doc
-            
-            # 创建PDF文档对象
-            from core.pdf_document import PDFDocument
-            pdf_doc = PDFDocument()
-            success, message = pdf_doc.load(file_path)
+            success = self.pdf_view.load_pdf(file_path)
             
             if success:
                 # 切换到PDF视图
@@ -730,8 +379,13 @@ class PDFWidget(QWidget):
                 self.placeholder.hide()
                 layout.addWidget(self.pdf_view)
                 
-                # 设置文档到视图
-                self.pdf_view.set_document(pdf_doc)
+                # 保存文档引用以兼容旧代码
+                try:
+                    import fitz
+                    self.doc = fitz.open(file_path)
+                except Exception as e:
+                    print(f"无法创建fitz文档引用: {e}")
+                    self.doc = None
                 
                 return True
             else:
@@ -740,11 +394,31 @@ class PDFWidget(QWidget):
         except Exception as e:
             print(f"加载PDF失败: {e}")
             return False
+    
+    def go_to_page(self, page_num):
+        """跳转到指定页面"""
+        self.pdf_view.go_to_page(page_num)
+    
+    def zoom_in(self):
+        """放大"""
+        self.pdf_view.zoom_in()
+    
+    def zoom_out(self):
+        """缩小"""
+        self.pdf_view.zoom_out()
+    
+    def fit_width(self):
+        """适应宽度"""
+        self.pdf_view.fit_width()
+    
+    def fit_page(self):
+        """适应页面"""
+        self.pdf_view.fit_page()
             
     def cleanup(self):
         """清理资源"""
         if hasattr(self, 'pdf_view'):
-            self.pdf_view.cleanup_threads()
+            self.pdf_view.cleanup()
             
         if self.doc:
             self.doc.close()
