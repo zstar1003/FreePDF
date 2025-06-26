@@ -3,8 +3,8 @@
 import os
 import sys
 
-from PyQt6.QtWidgets import QApplication
 from PyQt6.QtWebEngineCore import QWebEngineProfile
+from PyQt6.QtWidgets import QApplication
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -19,7 +19,7 @@ def main():
     # 设置应用程序属性
     app.setApplicationName("FreePDF")
     app.setApplicationVersion("1.0.0")
-    app.setOrganizationName("FreePDF")
+    app.setOrganizationName("zstar")
     
     # 预热WebEngine，提前初始化核心组件
     print("正在预热WebEngine...")

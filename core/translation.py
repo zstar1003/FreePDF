@@ -202,7 +202,7 @@ class TranslationManager(QObject):
         """清理资源"""
         self.stop_current_translation()
         
-        # 可选：清理临时翻译文件（注意：用户可能需要保留这些文件）
+        # 清理临时翻译文件
         # for translated_file in self.translated_files.values():
         #     try:
         #         if os.path.exists(translated_file):

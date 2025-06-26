@@ -2,10 +2,9 @@
 
 import os
 
-from PyQt6.QtCore import Qt, pyqtSlot, QTimer
-from PyQt6.QtGui import QAction, QIcon, QKeySequence
+from PyQt6.QtCore import Qt, QTimer, pyqtSlot
+from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import (
-    QApplication,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -13,19 +12,15 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QSpinBox,
     QSplitter,
     QStatusBar,
     QVBoxLayout,
     QWidget,
-    QMenuBar,
-    QCheckBox,
 )
 
 from core.translation import TranslationManager
 from ui.components import LoadingWidget, StatusLabel
 from ui.pdf_widget import PDFWidget
-
 
 
 class MainWindow(QMainWindow):
@@ -192,7 +187,6 @@ class MainWindow(QMainWindow):
         self.open_btn.clicked.connect(self.open_file)
         
         # PDF查看器信号
-        self.left_pdf_widget.page_changed.connect(self.on_page_changed)
         self.left_pdf_widget.text_selected.connect(self.on_text_selected)
         
         # 翻译管理器信号
@@ -220,10 +214,6 @@ class MainWindow(QMainWindow):
                 # 更新状态
                 filename = os.path.basename(file_path)
                 self.status_label.set_status(f"已加载: {filename}", "success")
-                
-                # 页面信息显示已移除，保持界面简洁
-                
-
                 
                 # 显示加载动画（不需要隐藏占位符，会被QStackedWidget自动管理）
                 self.show_loading_centered("正在准备翻译...")
@@ -338,14 +328,6 @@ class MainWindow(QMainWindow):
             
         except Exception as e:
             print(f"处理翻译失败时出错: {e}")
-        
-
-            
-    @pyqtSlot(int)
-    def on_page_changed(self, page_num):
-        """页面改变"""
-        # 页面信息显示已移除，保持界面简洁
-        pass
             
     @pyqtSlot(str)
     def on_text_selected(self, text):

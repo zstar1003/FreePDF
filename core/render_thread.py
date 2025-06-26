@@ -8,7 +8,7 @@ from PyQt6.QtGui import QImage, QPixmap
 class PageRenderThread(QThread):
     """页面渲染线程"""
     page_rendered = pyqtSignal(int, object, object)  # 页码, QPixmap, 文本列表
-    preview_rendered = pyqtSignal(int, object)  # 页码, 预览QPixmap（低质量快速版本）
+    preview_rendered = pyqtSignal(int, object)  # 页码, 预览QPixmap
     
     def __init__(self, doc, page_num, zoom_factor, dpi, target_width=None, high_quality=True, parent=None):
         super().__init__(parent)

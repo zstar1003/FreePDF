@@ -1,9 +1,8 @@
 """PDF显示组件 - 基于Web渲染"""
 
 import os
-import urllib.parse
 
-from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtWebEngineCore import QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import (
@@ -11,7 +10,6 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QVBoxLayout,
     QWidget,
-    QGraphicsOpacityEffect,
 )
 
 
@@ -107,36 +105,6 @@ class WebPDFView(QWebEngineView):
         self.setHtml(preload_html)
         print("WebEngine预加载已启动...")
         
-    def load_pdf(self, file_path):
-        """加载PDF文件"""
-        try:
-            success = self.pdf_view.load_pdf(file_path)
-            
-            if success:
-                # 平滑切换到PDF视图，没有布局重排
-                self.stacked_widget.setCurrentIndex(1)
-                
-                # 移除淡入效果，直接显示PDF以避免渲染问题
-                # self._apply_fade_in_effect()
-                
-                # 强制刷新PDF视图
-                QTimer.singleShot(100, self._refresh_pdf_view)
-                
-                # 保存文档引用以兼容旧代码
-                try:
-                    import fitz
-                    self.doc = fitz.open(file_path)
-                except Exception as e:
-                    print(f"无法创建fitz文档引用: {e}")
-                    self.doc = None
-                
-                return True
-            else:
-                return False
-                
-        except Exception as e:
-            print(f"加载PDF失败: {e}")
-            return False
     
     def load_pdf(self, file_path):
         """加载PDF文件"""
@@ -178,30 +146,6 @@ class WebPDFView(QWebEngineView):
         except Exception as e:
             print(f"执行PDF加载失败: {e}")
             return False
-    
-    def _apply_fade_in_effect(self):
-        """应用淡入效果 - 已禁用以避免渲染问题"""
-        # 注释掉淡入效果，因为QGraphicsOpacityEffect可能导致WebEngine渲染问题
-        pass
-        # try:
-        #     # 创建透明度效果
-        #     self.opacity_effect = QGraphicsOpacityEffect()
-        #     self.setGraphicsEffect(self.opacity_effect)
-        #     
-        #     # 创建淡入动画
-        #     self.fade_animation = QPropertyAnimation(self.opacity_effect, b"opacity")
-        #     self.fade_animation.setDuration(300)  # 300ms淡入
-        #     self.fade_animation.setStartValue(0.0)
-        #     self.fade_animation.setEndValue(1.0)
-        #     self.fade_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        #     
-        #     # 启动动画
-        #     self.fade_animation.start()
-        #     
-        # except Exception as e:
-        #     print(f"淡入效果失败: {e}")
-        #     # 如果动画失败，确保PDF视图仍然可见
-        #     self.setGraphicsEffect(None)
     
     def _on_load_finished(self, success):
         """页面加载完成"""
@@ -554,9 +498,6 @@ class PDFWidget(QWidget):
                 # 平滑切换到PDF视图，没有布局重排
                 self.stacked_widget.setCurrentIndex(1)
                 
-                # 移除淡入效果，直接显示PDF以避免渲染问题
-                # self._apply_fade_in_effect()
-                
                 # 强制刷新PDF视图
                 QTimer.singleShot(100, self._refresh_pdf_view)
                 
@@ -593,30 +534,6 @@ class PDFWidget(QWidget):
             print("PDF视图已刷新")
         except Exception as e:
             print(f"刷新PDF视图失败: {e}")
-    
-    def _apply_fade_in_effect(self):
-        """应用淡入效果 - 已禁用以避免渲染问题"""
-        # 注释掉淡入效果，因为QGraphicsOpacityEffect可能导致WebEngine渲染问题
-        pass
-                 # try:
-         #     # 创建透明度效果
-         #     self.opacity_effect = QGraphicsOpacityEffect()
-         #     self.pdf_view.setGraphicsEffect(self.opacity_effect)
-         #     
-         #     # 创建淡入动画
-         #     self.fade_animation = QPropertyAnimation(self.opacity_effect, b"opacity")
-         #     self.fade_animation.setDuration(300)  # 300ms淡入
-         #     self.fade_animation.setStartValue(0.0)
-         #     self.fade_animation.setEndValue(1.0)
-         #     self.fade_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-         #     
-         #     # 启动动画
-         #     self.fade_animation.start()
-         #     
-         # except Exception as e:
-         #     print(f"淡入效果失败: {e}")
-         #     # 如果动画失败，确保PDF视图仍然可见
-         #     self.pdf_view.setGraphicsEffect(None)
     
     def _refresh_pdf_view(self):
         """刷新PDF视图显示"""
