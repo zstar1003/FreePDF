@@ -1,5 +1,6 @@
 """PDF翻译处理模块"""
 
+import json
 import os
 import traceback
 
@@ -48,11 +49,28 @@ class TranslationThread(QThread):
             
             print(f"开始翻译文件: {self.input_file}")
             
-            # 在这里才导入pdf2zh模块（延迟导入）
+            # 导入pdf2zh模块
             try:
                 print("正在导入pdf2zh模块...")
                 from pdf2zh import translate
+                from pdf2zh.config import ConfigManager
                 from pdf2zh.doclayout import OnnxModel
+                # 加载配置
+                with open('pdf2zh_config.json', 'r') as f:
+                    config = json.load(f)
+
+                # 应用配置
+                for key, value in config.items():
+                    if key not in ['models', 'fonts']:
+                        ConfigManager.set(key, value)
+
+                # 设置模型
+                model_path = config['models']['doclayout_path']
+
+                # 设置字体
+                font_path = config['fonts']['zh']
+                ConfigManager.set("NOTO_FONT_PATH", font_path)
+                
                 print("pdf2zh模块导入成功")
                 
             except ImportError as e:
@@ -73,8 +91,7 @@ class TranslationThread(QThread):
             
             try:
                 print("开始加载OnnxModel...")
-                model = OnnxModel.load_available()
-                print(f"模型加载结果: {model}")
+                model = OnnxModel(model_path)
                 
                 if model is None:
                     self.translation_failed.emit("无法加载AI模型，请检查模型文件")

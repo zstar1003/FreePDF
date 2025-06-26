@@ -1,0 +1,12 @@
+{
+    "models": {
+        "doclayout_path": "./models/doclayout_yolo_docstructbench_imgsz1024.onnx"
+    },
+    "fonts": {
+        "zh": "./fonts/SourceHanSerifCN-Regular.ttf",
+        "ja": "./fonts/SourceHanSerifJP-Regular.ttf",
+        "default": "./fonts/GoNotoKurrent-Regular.ttf"
+    },
+    "offline_mode": true,
+    "NOTO_FONT_PATH": "./fonts/SourceHanSerifCN-Regular.ttf"
+}
