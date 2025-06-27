@@ -25,11 +25,37 @@ class TranslationThread(QThread):
                  service=DEFAULT_SERVICE, threads=DEFAULT_THREADS, parent=None):
         super().__init__(parent)
         self.input_file = input_file
-        self.lang_in = lang_in
-        self.lang_out = lang_out
-        self.service = service
+        
+        # 尝试从配置文件加载翻译设置
+        config = self._load_translation_config()
+        self.lang_in = config.get('lang_in', lang_in)
+        self.lang_out = config.get('lang_out', lang_out)
+        self.service = config.get('service', service)
+        self.envs = config.get('envs', {})
         self.threads = threads
         self._stop_requested = False
+        
+    def _load_translation_config(self):
+        """加载翻译配置"""
+        import json
+        config_file = "pdf2zh_config.json"
+        default_config = {
+            "service": DEFAULT_SERVICE,
+            "lang_in": DEFAULT_LANG_IN,
+            "lang_out": DEFAULT_LANG_OUT,
+            "envs": {}
+        }
+        
+        try:
+            if os.path.exists(config_file):
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    full_config = json.load(f)
+                    if "translation" in full_config:
+                        return full_config["translation"]
+        except Exception as e:
+            print(f"读取翻译配置失败: {e}")
+            
+        return default_config
         
     def stop(self):
         """停止翻译"""
@@ -84,7 +110,6 @@ class TranslationThread(QThread):
         
         try:
             # 在exe环境中，重定向stdout和stderr到StringIO对象
-            # 这样tqdm就有一个有效的输出流可以写入
             if getattr(sys, 'frozen', False):  # 检查是否在PyInstaller打包的exe环境中
                 fake_stdout = StringIO()
                 fake_stderr = StringIO()
@@ -148,14 +173,26 @@ class TranslationThread(QThread):
                 input_dir = os.path.dirname(os.path.abspath(self.input_file))
                 print(f"输出目录设置为: {input_dir}")
                 
-                # 设置翻译参数
+                # 设置翻译参数  
+                font_path = config['fonts']['zh']
+                # 处理字体路径，确保在Windows系统上不会产生正则表达式错误
+                if font_path:
+                    # 获取绝对路径并转换为正斜杠格式
+                    font_path = os.path.abspath(font_path).replace('\\', '/')
+                    # 转义正则表达式特殊字符，防止被误解为正则表达式模式
+                    import re
+                    font_path = re.escape(font_path)
+                    print(f"处理后的字体路径: {font_path}")
+                
                 params = {
                     "model": model,
                     "lang_in": self.lang_in,
                     "lang_out": self.lang_out,
                     "service": self.service,
                     "thread": self.threads,
+                    "vfont": font_path,
                     "output": input_dir,  # 设置输出目录为输入文件所在目录
+                    "envs": self.envs,  # 添加环境变量
                 }
                 
                 print(f"翻译参数: {params}")
