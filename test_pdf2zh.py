@@ -21,13 +21,30 @@ model = OnnxModel(model_path)
 font_path = config['fonts']['zh']
 ConfigManager.set("NOTO_FONT_PATH", font_path)
 
+# service = silicon
+# envs ={
+#     "SILICON_API_KEY": "自己的api-key",
+#     "SILICON_MODEL": "Qwen/Qwen2.5-7B-Instruct"
+# }
+
+# service = ollama
+# envs ={
+#     "OLLAMA_HOST": "http://127.0.0.1:11434",
+#     "OLLAMA_MODEL": "deepseek-r1:1.5b"
+# }
+
+# service = google/bing
+envs = {}
+
+
 params = {
     "model": model,
     "lang_in": "en",
     "lang_out": "zh",
-    "service": "google", 
+    "service": "bing", 
     "thread": 4,
     "vfont": font_path,
+    "envs": envs
 }
 
 (file_mono, file_dual) = translate(files=["test.pdf"], **params)[0]

@@ -3,7 +3,7 @@
 import os
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot
-from PyQt6.QtGui import QIcon, QDragEnterEvent, QDropEvent
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon
 from PyQt6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.translation import TranslationManager
-from ui.components import StatusLabel, DragDropOverlay
+from ui.components import DragDropOverlay, StatusLabel, TranslationConfigDialog
 from ui.pdf_widget import PDFWidget
 
 
@@ -83,6 +83,23 @@ class MainWindow(QMainWindow):
             }
         """)
         toolbar_layout.addWidget(self.open_btn)
+        
+        # 配置按钮
+        self.config_btn = QPushButton("翻译配置")
+        self.config_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+        """)
+        toolbar_layout.addWidget(self.config_btn)
         
         toolbar_layout.addStretch()
         
@@ -170,6 +187,7 @@ class MainWindow(QMainWindow):
         """设置信号连接"""
         # 文件操作
         self.open_btn.clicked.connect(self.open_file)
+        self.config_btn.clicked.connect(self.open_config)
         
         # PDF查看器信号
         self.left_pdf_widget.text_selected.connect(self.on_text_selected)
@@ -188,6 +206,14 @@ class MainWindow(QMainWindow):
         
         if file_path:
             self.load_pdf_file(file_path)
+            
+    @pyqtSlot()
+    def open_config(self):
+        """打开翻译配置对话框"""
+        dialog = TranslationConfigDialog(self)
+        if dialog.exec() == dialog.DialogCode.Accepted:
+            # 配置已保存，可以在这里添加其他处理逻辑
+            self.status_label.set_status("翻译配置已更新", "success")
             
     def load_pdf_file(self, file_path):
         """加载PDF文件"""

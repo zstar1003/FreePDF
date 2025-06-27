@@ -4,7 +4,21 @@ import math
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QPainter
-from PyQt6.QtWidgets import QLabel, QProgressBar, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QProgressBar,
+    QPushButton,
+    QSizePolicy,
+    QSpacerItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class AnimationOverlay(QWidget):
@@ -113,7 +127,6 @@ class LoadingWidget(QWidget):
         main_layout.setSpacing(25)
         
         # 创建中心容器，用于限制内容宽度
-        from PyQt6.QtWidgets import QHBoxLayout
         center_container = QWidget()
         center_container.setMaximumWidth(460)  # 适应500px的固定宽度
         center_container.setMinimumHeight(220)  # 适应300px的固定高度
@@ -364,4 +377,275 @@ class DragDropOverlay(QWidget):
         
     def hide_overlay(self):
         """隐藏覆盖层"""
-        self.hide() 
+        self.hide()
+
+
+class TranslationConfigDialog(QDialog):
+    """翻译配置对话框"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("翻译配置")
+        self.setFixedSize(480, 500)
+        self.setModal(True)
+        
+        # 加载当前配置
+        self.load_current_config()
+        
+        # 创建UI
+        self.setup_ui()
+        
+    def setup_ui(self):
+        """设置UI界面"""
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(15)
+        
+        # 标题
+        title_label = QLabel("翻译引擎配置")
+        title_label.setStyleSheet("""
+            QLabel {
+                font-size: 18px;
+                font-weight: bold;
+                color: #333;
+                padding: 10px 0;
+            }
+        """)
+        main_layout.addWidget(title_label)
+        
+        # 基础配置组
+        basic_group = QGroupBox("基础配置")
+        basic_layout = QFormLayout(basic_group)
+        basic_layout.setSpacing(10)
+        
+                 # 翻译引擎选择
+        self.service_combo = QComboBox()
+        self.service_combo.addItems(["bing", "google", "silicon", "ollama"])
+        self.service_combo.currentTextChanged.connect(self.on_service_changed)
+        basic_layout.addRow("翻译引擎:", self.service_combo)
+        
+        # 语言映射字典
+        self.lang_display_map = {
+            "zh": "中文",
+            "en": "英文"
+        }
+        self.lang_code_map = {
+            "中文": "zh",
+            "英文": "en"
+        }
+        
+        # 原语言
+        self.lang_in_combo = QComboBox()
+        self.lang_in_combo.addItems(["英文", "中文"])
+        basic_layout.addRow("原语言:", self.lang_in_combo)
+        
+        # 目标语言
+        self.lang_out_combo = QComboBox()
+        self.lang_out_combo.addItems(["中文", "英文"])
+        basic_layout.addRow("目标语言:", self.lang_out_combo)
+        
+        main_layout.addWidget(basic_group)
+        
+        # 环境变量配置组
+        self.env_group = QGroupBox("环境变量配置")
+        self.env_layout = QFormLayout(self.env_group)
+        self.env_layout.setSpacing(10)
+        
+        # 环境变量输入框会根据服务类型动态创建
+        
+        main_layout.addWidget(self.env_group)
+        
+        # 添加弹性空间
+        spacer = QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        main_layout.addItem(spacer)
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        
+        # 取消按钮
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6c757d;
+                color: white;
+                border: none;
+                padding: 8px 20px;
+                border-radius: 4px;
+                font-weight: bold;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #5a6268;
+            }
+        """)
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        # 确定按钮
+        ok_btn = QPushButton("确定")
+        ok_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #007acc;
+                color: white;
+                border: none;
+                padding: 8px 20px;
+                border-radius: 4px;
+                font-weight: bold;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #005a9e;
+            }
+        """)
+        ok_btn.clicked.connect(self.accept)
+        button_layout.addWidget(ok_btn)
+        
+        main_layout.addLayout(button_layout)
+        
+        # 初始化显示
+        self.on_service_changed(self.service_combo.currentText())
+        
+    def on_service_changed(self, service):
+        """翻译引擎改变时的处理"""
+        # 清除之前的环境变量输入框
+        while self.env_layout.rowCount() > 0:
+            self.env_layout.removeRow(0)
+        
+        if service == "silicon":
+            # 创建Silicon配置控件
+            self.silicon_api_key = QLineEdit()
+            self.silicon_api_key.setPlaceholderText("请输入Silicon API Key")
+            self.silicon_model = QLineEdit()
+            self.silicon_model.setPlaceholderText("例如: Qwen/Qwen2.5-7B-Instruct")
+            
+            self.env_layout.addRow("API Key:", self.silicon_api_key)
+            self.env_layout.addRow("模型:", self.silicon_model)
+        elif service == "ollama":
+            # 创建Ollama配置控件
+            self.ollama_host = QLineEdit()
+            self.ollama_host.setPlaceholderText("例如: http://127.0.0.1:11434")
+            self.ollama_model = QLineEdit()
+            self.ollama_model.setPlaceholderText("例如: deepseek-r1:1.5b")
+            
+            self.env_layout.addRow("服务地址:", self.ollama_host)
+            self.env_layout.addRow("模型:", self.ollama_model)
+        else:
+            # Google/Bing 不需要额外配置
+            info_label = QLabel("该翻译引擎无需额外配置")
+            info_label.setStyleSheet("color: #6c757d; font-style: italic;")
+            self.env_layout.addRow(info_label)
+            
+    def load_current_config(self):
+        """加载当前配置"""
+        import json
+        import os
+        
+        # 默认配置
+        self.current_config = {
+            "service": "bing",
+            "lang_in": "en", 
+            "lang_out": "zh",
+            "envs": {}
+        }
+        
+        # 从统一配置文件加载
+        config_file = "pdf2zh_config.json"
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    full_config = json.load(f)
+                    if "translation" in full_config:
+                        self.current_config.update(full_config["translation"])
+            except Exception as e:
+                print(f"读取配置失败: {e}")
+                
+    def save_config(self):
+        """保存配置"""
+        import json
+        import os
+        
+        # 收集配置，将显示名称转换为代码
+        config = {
+            "service": self.service_combo.currentText(),
+            "lang_in": self.lang_code_map.get(self.lang_in_combo.currentText(), "en"),
+            "lang_out": self.lang_code_map.get(self.lang_out_combo.currentText(), "zh"),
+            "envs": {}
+        }
+        
+        # 收集环境变量
+        service = config["service"]
+        if service == "silicon":
+            if hasattr(self, 'silicon_api_key') and self.silicon_api_key.text().strip():
+                config["envs"]["SILICON_API_KEY"] = self.silicon_api_key.text().strip()
+            if hasattr(self, 'silicon_model') and self.silicon_model.text().strip():
+                config["envs"]["SILICON_MODEL"] = self.silicon_model.text().strip()
+        elif service == "ollama":
+            if hasattr(self, 'ollama_host') and self.ollama_host.text().strip():
+                config["envs"]["OLLAMA_HOST"] = self.ollama_host.text().strip()
+            if hasattr(self, 'ollama_model') and self.ollama_model.text().strip():
+                config["envs"]["OLLAMA_MODEL"] = self.ollama_model.text().strip()
+        
+        # 读取现有的完整配置文件
+        config_file = "pdf2zh_config.json"
+        full_config = {}
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    full_config = json.load(f)
+            except Exception as e:
+                print(f"读取现有配置失败: {e}")
+        
+        # 更新翻译配置部分
+        full_config["translation"] = config
+        
+        # 保存到统一配置文件
+        with open(config_file, 'w', encoding='utf-8') as f:
+            json.dump(full_config, f, indent=4, ensure_ascii=False)
+            
+        self.current_config = config
+        
+    def apply_current_config(self):
+        """应用当前配置到UI"""
+        # 设置服务
+        index = self.service_combo.findText(self.current_config.get("service", "bing"))
+        if index >= 0:
+            self.service_combo.setCurrentIndex(index)
+            
+        # 设置语言，将代码转换为显示名称
+        lang_in_code = self.current_config.get("lang_in", "en")
+        lang_in_display = self.lang_display_map.get(lang_in_code, "英文")
+        index = self.lang_in_combo.findText(lang_in_display)
+        if index >= 0:
+            self.lang_in_combo.setCurrentIndex(index)
+            
+        lang_out_code = self.current_config.get("lang_out", "zh")
+        lang_out_display = self.lang_display_map.get(lang_out_code, "中文")
+        index = self.lang_out_combo.findText(lang_out_display)
+        if index >= 0:
+            self.lang_out_combo.setCurrentIndex(index)
+            
+        # 设置环境变量
+        envs = self.current_config.get("envs", {})
+        if hasattr(self, 'silicon_api_key') and "SILICON_API_KEY" in envs:
+            self.silicon_api_key.setText(envs["SILICON_API_KEY"])
+        if hasattr(self, 'silicon_model') and "SILICON_MODEL" in envs:
+            self.silicon_model.setText(envs["SILICON_MODEL"])
+        if hasattr(self, 'ollama_host') and "OLLAMA_HOST" in envs:
+            self.ollama_host.setText(envs["OLLAMA_HOST"])
+        if hasattr(self, 'ollama_model') and "OLLAMA_MODEL" in envs:
+            self.ollama_model.setText(envs["OLLAMA_MODEL"])
+            
+    def showEvent(self, event):
+        """显示对话框时应用配置"""
+        super().showEvent(event)
+        self.apply_current_config()
+        
+    def accept(self):
+        """确定按钮处理"""
+        self.save_config()
+        super().accept()
+        
+    def get_config(self):
+        """获取当前配置"""
+        return self.current_config.copy() 

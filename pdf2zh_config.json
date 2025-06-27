@@ -7,6 +7,12 @@
         "ja": "./fonts/SourceHanSerifJP-Regular.ttf",
         "default": "./fonts/GoNotoKurrent-Regular.ttf"
     },
+    "translation": {
+        "service": "bing",
+        "lang_in": "zh",
+        "lang_out": "en",
+        "envs": {}
+    },
     "offline_mode": true,
     "NOTO_FONT_PATH": "./fonts/SourceHanSerifCN-Regular.ttf"
 }
