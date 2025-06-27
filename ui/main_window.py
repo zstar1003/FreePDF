@@ -3,7 +3,7 @@
 import os
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QDragEnterEvent, QDropEvent
 from PyQt6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.translation import TranslationManager
-from ui.components import LoadingWidget, StatusLabel
+from ui.components import StatusLabel, DragDropOverlay
 from ui.pdf_widget import PDFWidget
 
 
@@ -33,10 +33,16 @@ class MainWindow(QMainWindow):
         self.setGeometry(100, 100, 1600, 900)
         self.showMaximized()
         
+        # 启用拖拽功能
+        self.setAcceptDrops(True)
+        
         # 初始化组件
         self.current_file = None
         self.translation_manager = TranslationManager()
         self._pending_zoom_value = None
+        
+        # 创建拖拽提示覆盖层
+        self.drag_overlay = DragDropOverlay(self)
         
         # 创建UI
         self.setup_ui()
@@ -54,9 +60,12 @@ class MainWindow(QMainWindow):
         # 主布局
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(5)  # 设置主布局元素间距为5px，保持紧凑
         
         # 工具栏
         toolbar_layout = QHBoxLayout()
+        toolbar_layout.setContentsMargins(0, 0, 0, 0)  # 减少外边距
+        toolbar_layout.setSpacing(10)  # 控制元素间距
         
         # 文件操作按钮
         self.open_btn = QPushButton("打开PDF文件")
@@ -429,4 +438,56 @@ class MainWindow(QMainWindow):
             print("PDF组件预热已启动，WebEngine初始化中...")
             
         except Exception as e:
-            print(f"PDF组件预热失败: {e}") 
+            print(f"PDF组件预热失败: {e}")
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """拖拽进入事件"""
+        if event.mimeData().hasUrls():
+            # 检查是否包含PDF文件
+            urls = event.mimeData().urls()
+            for url in urls:
+                if url.isLocalFile():
+                    file_path = url.toLocalFile()
+                    if file_path.lower().endswith('.pdf'):
+                        event.acceptProposedAction()
+                        # 显示拖拽提示覆盖层
+                        self.drag_overlay.show_overlay(self)
+                        # 更新状态提示
+                        self.status_label.set_status("松开鼠标以导入PDF文件", "info")
+                        return
+        event.ignore()
+        
+    def dragMoveEvent(self, event):
+        """拖拽移动事件"""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+            
+    def dragLeaveEvent(self, event):
+        """拖拽离开事件"""
+        # 隐藏拖拽提示覆盖层
+        self.drag_overlay.hide_overlay()
+        # 恢复原始状态
+        if self.current_file:
+            filename = os.path.basename(self.current_file)
+            self.status_label.set_status(f"已加载: {filename}", "success")
+        else:
+            self.status_label.set_status("就绪", "info")
+        
+    def dropEvent(self, event: QDropEvent):
+        """拖拽放下事件"""
+        # 隐藏拖拽提示覆盖层
+        self.drag_overlay.hide_overlay()
+        
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            for url in urls:
+                if url.isLocalFile():
+                    file_path = url.toLocalFile()
+                    if file_path.lower().endswith('.pdf'):
+                        # 加载第一个找到的PDF文件
+                        self.load_pdf_file(file_path)
+                        event.acceptProposedAction()
+                        return
+        event.ignore() 

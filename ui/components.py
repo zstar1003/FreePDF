@@ -4,7 +4,7 @@ import math
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QPainter
-from PyQt6.QtWidgets import QLabel, QProgressBar, QVBoxLayout, QWidget, QSizePolicy
+from PyQt6.QtWidgets import QLabel, QProgressBar, QSizePolicy, QVBoxLayout, QWidget
 
 
 class AnimationOverlay(QWidget):
@@ -284,4 +284,84 @@ class StatusLabel(QLabel):
                 font-weight: bold;
             }}
         """)
-        self.setText(message) 
+        self.setText(message)
+
+
+class DragDropOverlay(QWidget):
+    """拖拽提示覆盖层"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
+        
+        # 设置样式
+        self.setStyleSheet("""
+            QWidget {
+                background: rgba(0, 122, 204, 0.15);
+                border: 3px dashed #007acc;
+                border-radius: 15px;
+            }
+            QLabel {
+                color: #007acc;
+                font-size: 24px;
+                font-weight: bold;
+                background: transparent;
+                border: none;
+            }
+        """)
+        
+        # 创建布局
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setContentsMargins(50, 50, 50, 50)
+        layout.setSpacing(20)
+        
+        # 添加图标标签
+        icon_label = QLabel("📄")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setStyleSheet("""
+            QLabel {
+                font-size: 48px;
+                background: transparent;
+                border: none;
+            }
+        """)
+        layout.addWidget(icon_label)
+        
+        # 添加文本标签
+        text_label = QLabel("拖拽PDF文件到此处")
+        text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        text_label.setWordWrap(True)
+        layout.addWidget(text_label)
+        
+        # 添加说明文字
+        desc_label = QLabel("支持 .pdf 格式文件")
+        desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc_label.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-size: 16px;
+                font-weight: normal;
+                background: transparent;
+                border: none;
+            }
+        """)
+        layout.addWidget(desc_label)
+        
+        # 默认隐藏
+        self.hide()
+        
+    def show_overlay(self, parent_widget):
+        """显示覆盖层"""
+        if parent_widget:
+            # 设置大小和位置与父控件一致
+            self.setGeometry(parent_widget.rect())
+            self.move(parent_widget.mapToGlobal(parent_widget.rect().topLeft()))
+        self.show()
+        self.raise_()
+        
+    def hide_overlay(self):
+        """隐藏覆盖层"""
+        self.hide() 
