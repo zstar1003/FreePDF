@@ -7,6 +7,81 @@ from PyQt6.QtGui import QColor, QPainter
 from PyQt6.QtWidgets import QLabel, QProgressBar, QVBoxLayout, QWidget, QSizePolicy
 
 
+class AnimationOverlay(QWidget):
+    """动画覆盖层 - 确保旋转动画在最上层"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.angle = 0
+        self.animation_center_x = 0
+        self.animation_center_y = 0
+        self.radius = 22  # 增大半径，让动画更明显
+        
+        # 设置为透明覆盖层
+        self.setStyleSheet("""
+            QWidget {
+                background: transparent;
+                border: none;
+            }
+        """)
+        
+        # 确保这个widget在最上层
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.raise_()
+        
+    def set_animation_center(self, x, y):
+        """设置动画中心点"""
+        self.animation_center_x = x
+        self.animation_center_y = y
+        self.update()
+        
+    def set_angle(self, angle):
+        """设置旋转角度"""
+        self.angle = angle
+        self.update()
+        
+    def paintEvent(self, event):
+        """绘制旋转动画"""
+        super().paintEvent(event)
+        
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        center_x = self.animation_center_x
+        center_y = self.animation_center_y
+        
+        # 只在有效位置绘制
+        if center_x > 0 and center_y > 0:
+            # 绘制外圈淡色圆圈 - 增加可见性
+            painter.setPen(QColor(0, 122, 204, 80))
+            painter.setBrush(QColor(0, 122, 204, 30))
+            painter.drawEllipse(center_x - self.radius - 8, center_y - self.radius - 8, 
+                              (self.radius + 8) * 2, (self.radius + 8) * 2)
+            
+            # 绘制旋转的加载点 - 增强可见性
+            painter.setPen(QColor(0, 122, 204, 150))
+            
+            for i in range(12):
+                angle_rad = math.radians(self.angle + i * 30)
+                x = center_x + self.radius * math.cos(angle_rad)
+                y = center_y + self.radius * math.sin(angle_rad)
+                
+                # 计算透明度，形成尾巴效果 - 增加最小透明度
+                alpha = int(255 * (1 - i * 0.06))  # 减少透明度衰减
+                if alpha < 80:  # 提高最小透明度
+                    alpha = 80
+                
+                painter.setBrush(QColor(0, 122, 204, alpha))
+                
+                # 绘制更大的圆点，增加可见性
+                point_size = 7 - (i * 0.2)  # 增大基础尺寸，减少衰减
+                if point_size < 4:  # 提高最小尺寸
+                    point_size = 4
+                    
+                painter.drawEllipse(int(x - point_size/2), int(y - point_size/2), 
+                                  int(point_size), int(point_size))
+
+
 class LoadingWidget(QWidget):
     """加载动画组件"""
     
@@ -58,6 +133,10 @@ class LoadingWidget(QWidget):
         self.animation_container = animation_container
         center_layout.addWidget(animation_container)
         
+        # 创建独立的动画覆盖层，确保动画在最上层
+        self.animation_overlay = AnimationOverlay(self)
+        self.animation_overlay.hide()  # 初始隐藏
+        
         # 消息标签
         self.message_label = QLabel(message)
         self.message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -107,71 +186,43 @@ class LoadingWidget(QWidget):
     def update_animation(self):
         """更新动画"""
         self.angle = (self.angle + 8) % 360  # 更平滑的角度变化
-        self.update()
+        
+        # 更新覆盖层的角度
+        if hasattr(self, 'animation_overlay'):
+            self.animation_overlay.set_angle(self.angle)
+            
+        # 重新计算动画中心位置
+        self._update_animation_position()
         
     def set_message(self, message):
         """设置消息"""
         self.message = message
         self.message_label.setText(message)
+    
+    def _update_animation_position(self):
+        """更新动画位置"""
+        if hasattr(self, 'animation_overlay') and hasattr(self, 'animation_container'):
+            # 确保覆盖层大小与LoadingWidget一致
+            self.animation_overlay.setGeometry(self.rect())
+            
+            # 计算动画中心位置
+            if self.animation_container:
+                animation_rect = self.animation_container.geometry()
+                center_x = self.width() // 2
+                center_y = animation_rect.center().y() + 30  # 往下移动
+                
+                # 设置动画中心
+                self.animation_overlay.set_animation_center(center_x, center_y)
+                
+                # 显示覆盖层并确保在最上层
+                self.animation_overlay.show()
+                self.animation_overlay.raise_()
         
     def paintEvent(self, event):
-        """绘制旋转圆圈"""
+        """绘制背景（动画由覆盖层处理）"""
         super().paintEvent(event)
-        
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # 基于animation_container的位置来计算动画位置
-        if hasattr(self, 'animation_container') and self.animation_container:
-            # 获取animation_container在LoadingWidget中的位置
-            animation_rect = self.animation_container.geometry()
-            
-            # 在animation_container的中心绘制动画
-            center_x = animation_rect.center().x()
-            center_y = animation_rect.center().y()
-            
-            # 确保不超出边界
-            radius = 18  # 固定半径，确保动画大小合适
-            
-            # 边界检查 - 确保动画在LoadingWidget内部
-            if center_x - radius - 5 < 0 or center_x + radius + 5 > self.width():
-                return  # 如果会超出边界，不绘制
-            if center_y - radius - 5 < 0 or center_y + radius + 5 > self.height():
-                return  # 如果会超出边界，不绘制
-        else:
-            # 如果没有animation_container，使用默认位置
-            center_x = self.width() // 2
-            center_y = self.height() // 4
-            radius = 18
-        
-        # 绘制外圈淡色圆圈 - 增加可见性
-        painter.setPen(QColor(0, 122, 204, 80))
-        painter.setBrush(QColor(0, 122, 204, 30))
-        painter.drawEllipse(center_x - radius - 8, center_y - radius - 8, 
-                          (radius + 8) * 2, (radius + 8) * 2)
-        
-        # 绘制旋转的加载点 - 增强可见性
-        painter.setPen(QColor(0, 122, 204, 150))
-        
-        for i in range(12):
-            angle_rad = math.radians(self.angle + i * 30)
-            x = center_x + radius * math.cos(angle_rad)
-            y = center_y + radius * math.sin(angle_rad)
-            
-            # 计算透明度，形成尾巴效果 - 增加最小透明度
-            alpha = int(255 * (1 - i * 0.06))  # 减少透明度衰减
-            if alpha < 80:  # 提高最小透明度
-                alpha = 80
-            
-            painter.setBrush(QColor(0, 122, 204, alpha))
-            
-            # 绘制更大的圆点，增加可见性
-            point_size = 6 - (i * 0.2)  # 增大基础尺寸，减少衰减
-            if point_size < 3:  # 提高最小尺寸
-                point_size = 3
-                
-            painter.drawEllipse(int(x - point_size/2), int(y - point_size/2), 
-                              int(point_size), int(point_size))
+        # 确保动画位置更新
+        self._update_animation_position()
         
     def show_centered(self, parent_widget):
         """在父控件中心显示"""
@@ -188,6 +239,8 @@ class LoadingWidget(QWidget):
         """关闭时停止定时器"""
         if hasattr(self, 'timer'):
             self.timer.stop()
+        if hasattr(self, 'animation_overlay'):
+            self.animation_overlay.hide()
         super().closeEvent(event)
 
 

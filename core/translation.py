@@ -141,7 +141,7 @@ class TranslationThread(QThread):
             if self._stop_requested:
                 return
                 
-            self.translation_progress.emit("正在翻译PDF文档，请稍候...")
+            self.translation_progress.emit("正在翻译PDF文档\n请稍候...")
             
             try:
                 # 获取输入文件所在目录作为输出目录
