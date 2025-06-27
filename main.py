@@ -80,7 +80,14 @@ def _load_pdf2zh_modules():
 
         print("步骤2: 导入pdf2zh模块...")
         
-        # 尝试先导入onnxruntime
+        # 尝试先导入onnxruntime（使用hook确保兼容性）
+        try:
+            print("  - 预导入onnxruntime hook...")
+            import onnxruntime_hook
+            print("  - onnxruntime hook 导入成功")
+        except Exception as e:
+            print(f"  - onnxruntime hook 导入失败: {e}")
+            
         try:
             print("  - 预导入onnxruntime...")
             import onnxruntime

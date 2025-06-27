@@ -13,13 +13,13 @@ InstallDirRegKey HKLM "Software\FreePDF" "InstallPath"
 RequestExecutionLevel admin
 
 # Version Information
-VIProductVersion "1.0.0.0"
+VIProductVersion "2.0.0.0"
 VIAddVersionKey "ProductName" "FreePDF"
 VIAddVersionKey "Comments" "Free PDF Translation Tool"
 VIAddVersionKey "CompanyName" "FreePDF Team"
 VIAddVersionKey "FileDescription" "FreePDF Setup"
-VIAddVersionKey "FileVersion" "1.0.0.0"
-VIAddVersionKey "ProductVersion" "1.0.0.0"
+VIAddVersionKey "FileVersion" "2.0.0.0"
+VIAddVersionKey "ProductVersion" "2.0.0.0"
 VIAddVersionKey "InternalName" "FreePDF"
 VIAddVersionKey "LegalCopyright" "© 2025 FreePDF Team"
 VIAddVersionKey "OriginalFilename" "FreePDF_Setup.exe"
@@ -31,7 +31,7 @@ VIAddVersionKey "OriginalFilename" "FreePDF_Setup.exe"
 
 # Pages
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "LICENSE.txt"
+!insertmacro MUI_PAGE_LICENSE "LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\FreePDF.exe"
@@ -67,7 +67,7 @@ Section "FreePDF" SecMain
     
     # Registry entries
     WriteRegStr HKLM "Software\FreePDF" "InstallPath" "$INSTDIR"
-    WriteRegStr HKLM "Software\FreePDF" "Version" "1.0.0"
+    WriteRegStr HKLM "Software\FreePDF" "Version" "2.0.0"
     
     # Add to control panel programs list
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "DisplayName" "FreePDF"
@@ -75,7 +75,7 @@ Section "FreePDF" SecMain
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "InstallLocation" "$INSTDIR"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "DisplayIcon" "$INSTDIR\FreePDF.exe"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "Publisher" "FreePDF Team"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "DisplayVersion" "1.0.0"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "DisplayVersion" "2.0.0"
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "NoModify" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "NoRepair" 1
     
@@ -104,16 +104,24 @@ Section "Uninstall"
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF"
 SectionEnd
 
-# Pre-install check
+# Pre-install check with improved update logic
 Function .onInit
     # Check if already installed
     ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "UninstallString"
+    ReadRegStr $R1 HKLM "Software\FreePDF" "Version"
+    
     StrCmp $R0 "" done
     
-    MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION \
-    "FreePDF is already installed.$\n$\nClick OK to uninstall the previous version, or Cancel to cancel installation." \
-    IDOK uninst
-    Abort
+    # Check version for better update messaging
+    StrCmp $R1 "2.0.0" same_version different_version
+    
+    same_version:
+        MessageBox MB_OKCANCEL|MB_ICONQUESTION "FreePDF v2.0.0 is already installed.$\n$\nClick OK to reinstall or Cancel to exit." IDOK uninst
+        Abort
+        
+    different_version:
+        MessageBox MB_OKCANCEL|MB_ICONINFORMATION "FreePDF $R1 is installed.$\n$\nClick OK to upgrade to v2.0.0 or Cancel to exit." IDOK uninst
+        Abort
     
     uninst:
         ClearErrors
