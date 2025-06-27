@@ -9,8 +9,8 @@
     },
     "translation": {
         "service": "bing",
-        "lang_in": "zh",
-        "lang_out": "en",
+        "lang_in": "en",
+        "lang_out": "zh",
         "envs": {}
     },
     "offline_mode": true,
