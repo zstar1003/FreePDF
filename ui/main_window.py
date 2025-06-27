@@ -134,12 +134,6 @@ class MainWindow(QMainWindow):
         self.right_pdf_widget = PDFWidget()
         right_layout.addWidget(self.right_pdf_widget)
         
-        # 创建加载动画
-        self.loading_widget = LoadingWidget("等待上传PDF文件...")
-        # 设置parent为right_frame
-        self.loading_widget.setParent(right_frame)
-        self.loading_widget.hide()
-        
         # 保存right_frame的引用，用于后续定位
         self.right_frame = right_frame
         
@@ -211,33 +205,16 @@ class MainWindow(QMainWindow):
 
     def show_loading_centered(self, message):
         """显示居中的加载动画"""
-        self.loading_widget.set_message(message)
-        # 隐藏右侧PDF视图，但保持容器本身可见
-        self.right_pdf_widget.reset_to_placeholder()
-        self.loading_widget.show()
-        
-        # 使用QTimer延迟执行居中定位，确保布局已完成
-        QTimer.singleShot(10, self.center_loading_widget)
+        self.right_pdf_widget.show_loading(message)
 
     def center_loading_widget(self):
         """将loading widget居中在PDF widget区域"""
-        try:
-            # 获取PDF widget的几何信息
-            pdf_widget_rect = self.right_pdf_widget.geometry()
-            
-            # 计算居中位置（相对于right_frame）
-            x = pdf_widget_rect.x() + (pdf_widget_rect.width() - self.loading_widget.width()) // 2
-            y = pdf_widget_rect.y() + (pdf_widget_rect.height() - self.loading_widget.height()) // 2
-            
-            self.loading_widget.move(x, y)
-            self.loading_widget.raise_()  # 确保在最上层
-            
-        except Exception as e:
-            print(f"居中loading widget时出错: {e}")
+        # 不再需要手动居中，因为加载页面已集成在QStackedWidget中
+        pass
 
     def hide_loading(self):
         """隐藏加载动画"""
-        self.loading_widget.hide()
+        self.right_pdf_widget.hide_loading()
 
     def start_translation(self, file_path):
         """开始翻译PDF"""
@@ -255,7 +232,7 @@ class MainWindow(QMainWindow):
     def on_translation_progress(self, message):
         """翻译进度更新"""
         try:
-            self.loading_widget.set_message(message)
+            self.right_pdf_widget.set_loading_message(message)
             self.status_label.set_status(message, "info")
         except Exception as e:
             print(f"更新翻译进度时出错: {e}")
@@ -278,7 +255,7 @@ class MainWindow(QMainWindow):
             self.translation_manager.set_translated_file(self.current_file, translated_file)
             
             # 先隐藏加载动画，然后加载翻译后的文件到右侧
-            self.loading_widget.hide()
+            self.hide_loading()
             
             # 重试机制加载PDF
             retry_count = 3
@@ -356,9 +333,9 @@ class MainWindow(QMainWindow):
             # 确保右侧PDF容器可见
             self.right_pdf_widget.show()
             
-            # 确保QStackedWidget显示PDF视图（索引1）
+            # 确保QStackedWidget显示PDF视图（索引2）
             if hasattr(self.right_pdf_widget, 'stacked_widget'):
-                self.right_pdf_widget.stacked_widget.setCurrentIndex(1)
+                self.right_pdf_widget.stacked_widget.setCurrentIndex(2)
                 print("已切换到PDF视图页面")
             
             # 显示PDF视图
@@ -386,7 +363,7 @@ class MainWindow(QMainWindow):
         """翻译失败"""
         try:
             # 隐藏加载动画
-            self.loading_widget.hide()
+            self.hide_loading()
             
             # 使用新的重置方法，平滑切换回占位符
             self.right_pdf_widget.reset_to_placeholder()
@@ -426,9 +403,7 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         """窗口大小改变时重新调整loading widget位置"""
         super().resizeEvent(event)
-        if hasattr(self, 'loading_widget') and self.loading_widget.isVisible():
-            # 延迟执行居中，确保布局调整完成
-            QTimer.singleShot(50, self.center_loading_widget) 
+        # 不再需要手动调整加载组件位置，因为它已集成在QStackedWidget中
 
     def _preheat_pdf_components(self):
         """预热PDF组件，确保WebEngine提前初始化"""
