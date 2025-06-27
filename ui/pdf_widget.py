@@ -475,12 +475,21 @@ class PDFWidget(QWidget):
             }
         """)
         
+        # 创建加载页面
+        from .components import LoadingWidget
+        self.loading_widget = LoadingWidget("正在加载PDF...")
+        loading_container = QWidget()
+        loading_layout = QVBoxLayout(loading_container)
+        loading_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        loading_layout.addWidget(self.loading_widget)
+        
         # 创建PDF视图页面
         self.pdf_view = WebPDFView()
         
         # 添加到堆叠组件
-        self.stacked_widget.addWidget(self.placeholder)  # 索引0: 占位符
-        self.stacked_widget.addWidget(self.pdf_view)      # 索引1: PDF视图
+        self.stacked_widget.addWidget(self.placeholder)     # 索引0: 占位符
+        self.stacked_widget.addWidget(loading_container)    # 索引1: 加载页面
+        self.stacked_widget.addWidget(self.pdf_view)        # 索引2: PDF视图
         
         # 默认显示占位符
         self.stacked_widget.setCurrentIndex(0)
@@ -488,6 +497,19 @@ class PDFWidget(QWidget):
         # 连接信号
         self.pdf_view.text_selected.connect(self.text_selected.emit)
         self.pdf_view.page_changed.connect(self.page_changed.emit)
+    
+    def show_loading(self, message="正在加载PDF..."):
+        """显示加载页面"""
+        self.loading_widget.set_message(message)
+        self.stacked_widget.setCurrentIndex(1)
+    
+    def hide_loading(self):
+        """隐藏加载页面，返回到占位符"""
+        self.stacked_widget.setCurrentIndex(0)
+    
+    def set_loading_message(self, message):
+        """设置加载消息"""
+        self.loading_widget.set_message(message)
         
     def load_pdf(self, file_path):
         """加载PDF文件"""
@@ -496,7 +518,7 @@ class PDFWidget(QWidget):
             
             if success:
                 # 平滑切换到PDF视图，没有布局重排
-                self.stacked_widget.setCurrentIndex(1)
+                self.stacked_widget.setCurrentIndex(2)
                 
                 # 强制刷新PDF视图
                 QTimer.singleShot(100, self._refresh_pdf_view)
@@ -535,24 +557,6 @@ class PDFWidget(QWidget):
         except Exception as e:
             print(f"刷新PDF视图失败: {e}")
     
-    def _refresh_pdf_view(self):
-        """刷新PDF视图显示"""
-        try:
-            # 强制更新PDF视图
-            self.pdf_view.update()
-            self.pdf_view.repaint()
-            
-            # 确保PDF视图获得焦点
-            self.pdf_view.setFocus()
-            
-            # 触发整个窗口重绘
-            self.update()
-            self.repaint()
-            
-            print("PDF视图已刷新")
-        except Exception as e:
-            print(f"刷新PDF视图失败: {e}")
-    
     def reset_to_placeholder(self):
         """重置到占位符状态"""
         self.stacked_widget.setCurrentIndex(0)
@@ -584,7 +588,7 @@ class PDFWidget(QWidget):
         """显示事件处理"""
         super().showEvent(event)
         # 当PDFWidget显示时，确保PDF视图也能正确显示
-        if self.stacked_widget.currentIndex() == 1:  # PDF视图激活
+        if self.stacked_widget.currentIndex() == 2:  # PDF视图激活
             QTimer.singleShot(100, self._refresh_pdf_view)
             
     def cleanup(self):
