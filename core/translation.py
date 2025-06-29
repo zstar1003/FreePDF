@@ -174,15 +174,16 @@ class TranslationThread(QThread):
                 print(f"输出目录设置为: {input_dir}")
                 
                 # 设置翻译参数  
-                font_path = config['fonts']['zh']
+                # 根据目标语言选择合适的字体
+                font_path = config['fonts'].get(self.lang_out, config['fonts'].get('default'))
                 # 处理字体路径，确保在Windows系统上不会产生正则表达式错误
                 if font_path:
-                    # 获取绝对路径并转换为正斜杠格式
+                    # 获取绝对路径并转换为正斜杠格式  
                     font_path = os.path.abspath(font_path).replace('\\', '/')
                     # 转义正则表达式特殊字符，防止被误解为正则表达式模式
                     import re
                     font_path = re.escape(font_path)
-                    print(f"处理后的字体路径: {font_path}")
+                    print(f"目标语言: {self.lang_out}, 处理后的字体路径: {font_path}")
                 
                 params = {
                     "model": model,

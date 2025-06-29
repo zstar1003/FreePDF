@@ -427,21 +427,27 @@ class TranslationConfigDialog(QDialog):
         # 语言映射字典
         self.lang_display_map = {
             "zh": "中文",
-            "en": "英文"
+            "en": "英文",
+            "ja": "日语",
+            "ko": "韩语",
+            "zh-TW": "繁体中文"
         }
         self.lang_code_map = {
             "中文": "zh",
-            "英文": "en"
+            "英文": "en",
+            "日语": "ja",
+            "韩语": "ko",
+            "繁体中文": "zh-TW"
         }
         
         # 原语言
         self.lang_in_combo = QComboBox()
-        self.lang_in_combo.addItems(["英文", "中文"])
+        self.lang_in_combo.addItems(["英文", "中文", "日语", "韩语", "繁体中文"])
         basic_layout.addRow("原语言:", self.lang_in_combo)
         
         # 目标语言
         self.lang_out_combo = QComboBox()
-        self.lang_out_combo.addItems(["中文", "英文"])
+        self.lang_out_combo.addItems(["中文", "英文", "日语", "韩语", "繁体中文"])
         basic_layout.addRow("目标语言:", self.lang_out_combo)
         
         main_layout.addWidget(basic_group)

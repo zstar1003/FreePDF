@@ -5,6 +5,8 @@
     "fonts": {
         "zh": "./fonts/SourceHanSerifCN-Regular.ttf",
         "ja": "./fonts/SourceHanSerifJP-Regular.ttf",
+        "ko": "./fonts/SourceHanSerifKR-Regular.ttf",
+        "zh-TW": "./fonts/SourceHanSerifTW-Regular.ttf",
         "default": "./fonts/GoNotoKurrent-Regular.ttf"
     },
     "translation": {
