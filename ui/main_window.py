@@ -1,10 +1,17 @@
 """主窗口模块"""
 
 import os
+import webbrowser
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSlot
+import requests
+
+# 应用版本信息
+__version__ = "3.0.0"
+
+from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon
 from PyQt6.QtWidgets import (
+    QDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -14,6 +21,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSplitter,
     QStatusBar,
+    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
@@ -115,6 +123,23 @@ class MainWindow(QMainWindow):
         toolbar_layout.addWidget(self.config_btn)
         
         toolbar_layout.addStretch()
+        
+        # 关于软件按钮
+        self.about_btn = QPushButton("关于软件")
+        self.about_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #17a2b8;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #138496;
+            }
+        """)
+        toolbar_layout.addWidget(self.about_btn)
         
         # 智能问答按钮 - 放到最右边，默认显示状态
         self.qa_btn = QPushButton("关闭问答")
@@ -263,6 +288,7 @@ class MainWindow(QMainWindow):
         # 文件操作
         self.open_btn.clicked.connect(self.open_file)
         self.config_btn.clicked.connect(self.open_config)
+        self.about_btn.clicked.connect(self.show_about_dialog)
         self.qa_btn.clicked.connect(self.toggle_qa_widget)
         
         # PDF查看器信号
@@ -292,6 +318,12 @@ class MainWindow(QMainWindow):
             self.status_label.set_status("翻译配置已更新", "success")
             
     @pyqtSlot()
+    def show_about_dialog(self):
+        """显示关于软件对话框"""
+        dialog = AboutDialog(self)
+        dialog.exec()
+            
+    @pyqtSlot()
     def toggle_qa_widget(self):
         """切换智能问答面板显示/隐藏"""
         if self.qa_panel_visible:
@@ -314,7 +346,7 @@ class MainWindow(QMainWindow):
             new_sizes = [sizes[0], sizes[1], current_sizes[2]]  # 保持第三栏原样
             self.main_splitter.setSizes(new_sizes)
             
-            print(f"隐藏面板 - 设置可见性: False")
+            print("隐藏面板 - 设置可见性: False")
         else:
             # 显示问答面板
             self.qa_panel_visible = True
@@ -396,7 +428,7 @@ class MainWindow(QMainWindow):
                         
                 return True
                 
-        except Exception as e:
+        except Exception:
             return False
             
     def _extract_pdf_text(self):
@@ -732,3 +764,178 @@ class MainWindow(QMainWindow):
                         event.acceptProposedAction()
                         return
         event.ignore() 
+
+
+class UpdateCheckThread(QThread):
+    """检查更新的线程"""
+    update_checked = pyqtSignal(bool, str)  # 是否有更新, 最新版本/错误信息
+    
+    def run(self):
+        try:
+            # 获取当前版本
+            current_version = __version__
+            
+            # 请求GitHub API获取最新版本
+            response = requests.get(
+                "https://api.github.com/repos/zstar1003/FreePDF/releases/latest",
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                release_data = response.json()
+                latest_version = release_data.get("tag_name", "").lstrip("v")
+                
+                # 简单的版本比较
+                if latest_version and latest_version != current_version:
+                    self.update_checked.emit(True, latest_version)
+                else:
+                    self.update_checked.emit(False, "已是最新版本")
+            else:
+                self.update_checked.emit(False, f"检查更新失败: HTTP {response.status_code}")
+                
+        except requests.exceptions.RequestException as e:
+            self.update_checked.emit(False, f"网络连接失败: {str(e)}")
+        except Exception as e:
+            self.update_checked.emit(False, f"检查更新时出错: {str(e)}")
+
+
+class AboutDialog(QDialog):
+    """关于软件对话框"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("关于 FreePDF")
+        self.setFixedSize(500, 400)
+        
+        # 创建检查更新线程
+        self.update_thread = UpdateCheckThread()
+        self.update_thread.update_checked.connect(self.on_update_checked)
+        
+        self.setup_ui()
+        
+    def setup_ui(self):
+        """设置UI"""
+        layout = QVBoxLayout(self)
+        layout.setSpacing(20)
+        layout.setContentsMargins(30, 30, 30, 30)
+        
+        # 软件标题
+        title_label = QLabel("FreePDF")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setStyleSheet("""
+            QLabel {
+                font-size: 28px;
+                font-weight: bold;
+                color: #007acc;
+                margin-bottom: 10px;
+            }
+        """)
+        layout.addWidget(title_label)
+        
+        # 版本信息
+        version_label = QLabel(f"版本 {__version__}")
+        version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        version_label.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                color: #666;
+                margin-bottom: 20px;
+            }
+        """)
+        layout.addWidget(version_label)
+        
+        # 开发者信息
+        info_text = QTextBrowser()
+        info_text.setReadOnly(True)
+        info_text.setMaximumHeight(180)
+        info_text.setHtml("""
+        <div style="font-size: 14px; line-height: 1.6; color: #333;">
+            <p><strong>制作者：</strong>zstar</p>
+            <p><strong>微信公众号：</strong>我有一计</p>
+            <p><strong>理念：</strong>一直致力于构建免费好用的软件</p>
+            <p><strong>项目地址：</strong>https://github.com/zstar1003/FreePDF</p>
+        </div>
+        """)
+        info_text.setStyleSheet("""
+            QTextBrowser {
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                padding: 15px;
+                background-color: #f9f9f9;
+            }
+        """)
+        layout.addWidget(info_text)
+        
+        # 按钮区域
+        button_layout = QHBoxLayout()
+        
+        # 检查更新按钮
+        self.update_btn = QPushButton("检查更新")
+        self.update_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+            QPushButton:disabled {
+                background-color: #6c757d;
+                color: #fff;
+            }
+        """)
+        self.update_btn.clicked.connect(self.check_for_updates)
+        button_layout.addWidget(self.update_btn)
+        
+        button_layout.addStretch()
+        
+        # 关闭按钮
+        close_btn = QPushButton("关闭")
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6c757d;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #5a6268;
+            }
+        """)
+        close_btn.clicked.connect(self.accept)
+        button_layout.addWidget(close_btn)
+        
+        layout.addLayout(button_layout)
+        
+    def check_for_updates(self):
+        """检查更新"""
+        self.update_btn.setEnabled(False)
+        self.update_btn.setText("检查中...")
+        self.update_thread.start()
+        
+    def on_update_checked(self, has_update, message):
+        """更新检查完成"""
+        self.update_btn.setEnabled(True)
+        self.update_btn.setText("检查更新")
+        
+        if has_update:
+            # 有新版本
+            reply = QMessageBox.question(
+                self,
+                "发现新版本",
+                f"发现新版本 {message}，是否前往下载？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                webbrowser.open("https://github.com/zstar1003/FreePDF/releases/latest")
+        else:
+            # 无新版本或出错
+            QMessageBox.information(self, "检查更新", message) 

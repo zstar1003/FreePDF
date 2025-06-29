@@ -2,9 +2,9 @@
 
 import json
 import os
-import requests
-from typing import Dict, Any
+from typing import Any, Dict
 
+import requests
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
 
