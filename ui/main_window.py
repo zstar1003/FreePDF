@@ -19,7 +19,13 @@ from PyQt6.QtWidgets import (
 )
 
 from core.translation import TranslationManager
-from ui.components import DragDropOverlay, StatusLabel, TranslationConfigDialog, QADialog, EmbeddedQAWidget
+from ui.components import (
+    DragDropOverlay,
+    EmbeddedQAWidget,
+    QADialog,
+    StatusLabel,
+    TranslationConfigDialog,
+)
 from ui.pdf_widget import PDFWidget
 
 
@@ -320,12 +326,12 @@ class MainWindow(QMainWindow):
             # 检查当前状态并更新提示信息
             self._update_qa_panel_status()
             
-            # 调整三栏分割器：左侧30%，中间45%，右侧25%
+            # 调整三栏分割器：左侧37.5%，中间37.5%，右侧25%（左边两个容器宽度一致）
             total_width = self.main_splitter.width()
             if total_width > 100:
-                sizes = [int(total_width * 0.3), int(total_width * 0.45), int(total_width * 0.25)]
+                sizes = [int(total_width * 0.375), int(total_width * 0.375), int(total_width * 0.25)]
             else:
-                sizes = [300, 450, 250]
+                sizes = [375, 375, 250]
             self.main_splitter.setSizes(sizes)
             
             print(f"显示面板 - 设置可见性: True, 分割器大小: {sizes}")

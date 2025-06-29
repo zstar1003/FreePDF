@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSpacerItem,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -1108,6 +1109,27 @@ class QADialog(QDialog):
         self.process_question(question)
 
 
+class ChatInputWidget(QTextEdit):
+    """支持回车发送的聊天输入框"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent_widget = parent
+        
+    def keyPressEvent(self, event):
+        """处理键盘事件"""
+        from PyQt6.QtCore import Qt
+        
+        # 检查是否按下回车键（不是Shift+回车）
+        if event.key() == Qt.Key.Key_Return and event.modifiers() != Qt.KeyboardModifier.ShiftModifier:
+            # 发送消息
+            if hasattr(self.parent_widget, 'send_question'):
+                self.parent_widget.send_question()
+        else:
+            # 其他按键正常处理
+            super().keyPressEvent(event)
+
+
 class EmbeddedQAWidget(QWidget):
     """嵌入式问答组件"""
     
@@ -1144,18 +1166,19 @@ class EmbeddedQAWidget(QWidget):
         """)
         main_layout.addWidget(title_label)
         
-        # 对话显示区域
-        from PyQt6.QtWidgets import QTextEdit
+        # 对话显示区域 - 使用简单文本格式
+        from PyQt6.QtWidgets import QTextBrowser, QTextEdit
         self.chat_display = QTextEdit()
         self.chat_display.setReadOnly(True)
         self.chat_display.setStyleSheet("""
             QTextEdit {
                 border: 1px solid #ddd;
                 border-radius: 6px;
-                padding: 8px;
-                background-color: #f8f9fa;
-                font-size: 13px;
-                line-height: 1.4;
+                padding: 15px;
+                background-color: white;
+                font-size: 14px;
+                line-height: 1.8;
+                font-family: 'Consolas', 'Microsoft YaHei', monospace;
             }
         """)
         self.chat_display.setPlaceholderText("对话内容将在这里显示...")
@@ -1164,8 +1187,8 @@ class EmbeddedQAWidget(QWidget):
         # 输入区域
         input_layout = QVBoxLayout()
         
-        # 问题输入框
-        self.question_input = QTextEdit()
+        # 问题输入框 - 支持回车发送
+        self.question_input = ChatInputWidget(self)
         self.question_input.setMaximumHeight(80)
         self.question_input.setStyleSheet("""
             QTextEdit {
@@ -1179,7 +1202,7 @@ class EmbeddedQAWidget(QWidget):
                 border-color: #0056b3;
             }
         """)
-        self.question_input.setPlaceholderText("请输入您的问题...")
+        self.question_input.setPlaceholderText("请输入您的问题...（按回车发送，Shift+回车换行）")
         input_layout.addWidget(self.question_input)
         
         # 按钮布局
@@ -1256,6 +1279,13 @@ class EmbeddedQAWidget(QWidget):
         """清空对话历史"""
         self.chat_history.clear()
         self.chat_display.clear()
+        # 添加简洁的欢迎信息
+        welcome_msg = """🎉 智能问答面板
+
+💡 提示: 请先打开PDF文件，然后就可以开始提问了！
+
+"""
+        self.chat_display.setPlainText(welcome_msg)
         self.status_label.setText("对话已清空")
         
     def show_widget(self):
@@ -1291,30 +1321,61 @@ class EmbeddedQAWidget(QWidget):
         # 调用AI问答功能
         self.process_question(question)
         
+
+    
     def add_message(self, sender, message):
         """添加消息到对话显示区域"""
         timestamp = __import__('datetime').datetime.now().strftime("%H:%M:%S")
         
-        # 添加空行分隔
-        self.chat_display.append("")
-        
+        # 构建清晰的纯文本格式
         if sender == "用户":
-            # 设置用户消息颜色
-            self.chat_display.setTextColor(__import__('PyQt6.QtGui').QtGui.QColor(0, 122, 204))
-            self.chat_display.append(f"👤 {sender} [{timestamp}]")
-            # 设置普通文本颜色
-            self.chat_display.setTextColor(__import__('PyQt6.QtGui').QtGui.QColor(0, 0, 0))
-            self.chat_display.append(message)
+            prefix = "👤 用户"
+        elif sender == "AI助手":
+            prefix = "🤖 AI助手"
         else:
-            # 设置系统/AI消息颜色
-            self.chat_display.setTextColor(__import__('PyQt6.QtGui').QtGui.QColor(220, 53, 69))
-            self.chat_display.append(f"🔧 {sender} [{timestamp}]")
-            # 设置普通文本颜色
-            self.chat_display.setTextColor(__import__('PyQt6.QtGui').QtGui.QColor(0, 0, 0))
-            self.chat_display.append(message)
+            prefix = "🔧 系统"
+        
+        # 构建简洁消息头
+        header = f"\n{prefix} [{timestamp}]\n"
+        
+        # 简化消息内容处理，保持LaTeX原样
+        formatted_message = self._format_simple_text(message)
+        
+        # 添加消息
+        full_message = header + formatted_message + "\n"
+        
+        # 添加到显示区域
+        self.chat_display.append(full_message)
         
         # 确保滚动到底部
         self.chat_display.ensureCursorVisible()
+    
+    def _format_simple_text(self, text):
+        """简单文本格式化，保持LaTeX公式原样"""
+        # 基本的文本处理，不转换LaTeX
+        lines = text.split('\n')
+        formatted_lines = []
+        
+        for line in lines:
+            # 检测LaTeX公式行（以\[开头或包含数学符号）
+            if '\\[' in line or '\\]' in line or line.startswith('$$') or line.endswith('$$'):
+                # 公式行，添加缩进和标记
+                formatted_lines.append(f"    📐 公式: {line}")
+            elif line.strip().startswith('```') or line.strip().endswith('```'):
+                # 代码块
+                formatted_lines.append(f"    💻 代码: {line}")
+            elif '**' in line:
+                # 粗体文本，简单标记
+                line = line.replace('**', '【')
+                formatted_lines.append(f"    {line}")
+            else:
+                # 普通文本
+                if line.strip():
+                    formatted_lines.append(f"    {line}")
+                else:
+                    formatted_lines.append("")
+        
+        return '\n'.join(formatted_lines)
         
     def process_question(self, question):
         """处理问题"""
@@ -1338,17 +1399,15 @@ class EmbeddedQAWidget(QWidget):
         # 如果是第一个chunk，添加AI消息头
         if len(self.current_response) == len(chunk):
             timestamp = __import__('datetime').datetime.now().strftime("%H:%M:%S")
-            self.chat_display.append("")  # 换行
-            # 添加AI标签
-            self.chat_display.setTextColor(__import__('PyQt6.QtGui').QtGui.QColor(40, 167, 69))
-            self.chat_display.append(f"🤖 AI助手 [{timestamp}]")
-            # 重置颜色为普通文本
-            self.chat_display.setTextColor(__import__('PyQt6.QtGui').QtGui.QColor(0, 0, 0))
-            # 开始AI回答内容（不换行，同一行继续）
-            cursor = self.chat_display.textCursor()
-            cursor.insertText("")  # 准备插入内容
+            
+            # 添加简洁AI消息头
+            header = f"\n🤖 AI助手 [{timestamp}]\n"
+            self.chat_display.append(header)
+            
+            # 记录开始位置
+            self._ai_start_position = len(self.chat_display.toPlainText())
         
-        # 插入新的内容块
+        # 实时更新显示（简单文本追加）
         cursor = self.chat_display.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
         cursor.insertText(chunk)
@@ -1365,13 +1424,16 @@ class EmbeddedQAWidget(QWidget):
             "answer": self.current_response
         })
         
+        # 添加简单的换行分隔
+        self.chat_display.append("\n")
+        
         # 恢复发送按钮
         self.send_btn.setEnabled(True)
         self.send_btn.setText("发送")
         self.status_label.setText("回答完成")
         
-        # 添加换行，为下一轮对话做准备
-        self.chat_display.append("")
+        # 滚动到底部
+        self.chat_display.ensureCursorVisible()
         
     def on_response_failed(self, error_message):
         """AI回答失败"""

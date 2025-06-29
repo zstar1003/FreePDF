@@ -16,11 +16,8 @@
         "envs": {}
     },
     "qa_engine": {
-        "service": "silicon",
-        "envs": {
-            "SILICON_API_KEY": "",
-            "SILICON_MODEL": ""
-        }
+        "service": "关闭",
+        "envs": {}
     },
     "offline_mode": true,
     "NOTO_FONT_PATH": "./fonts/SourceHanSerifCN-Regular.ttf"
