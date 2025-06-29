@@ -15,6 +15,10 @@
         "lang_out": "zh",
         "envs": {}
     },
+    "qa_engine": {
+        "service": "关闭",
+        "envs": {}
+    },
     "offline_mode": true,
     "NOTO_FONT_PATH": "./fonts/SourceHanSerifCN-Regular.ttf"
 }

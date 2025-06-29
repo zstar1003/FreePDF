@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSpacerItem,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -453,13 +454,33 @@ class TranslationConfigDialog(QDialog):
         main_layout.addWidget(basic_group)
         
         # 环境变量配置组
-        self.env_group = QGroupBox("环境变量配置")
+        self.env_group = QGroupBox("翻译引擎环境变量")
         self.env_layout = QFormLayout(self.env_group)
         self.env_layout.setSpacing(10)
         
         # 环境变量输入框会根据服务类型动态创建
         
         main_layout.addWidget(self.env_group)
+        
+        # 问答引擎配置组
+        qa_group = QGroupBox("问答引擎配置")
+        qa_layout = QFormLayout(qa_group)
+        qa_layout.setSpacing(10)
+        
+        # 问答引擎选择
+        self.qa_service_combo = QComboBox()
+        self.qa_service_combo.addItems(["关闭", "silicon", "ollama"])
+        self.qa_service_combo.currentTextChanged.connect(self.on_qa_service_changed)
+        qa_layout.addRow("问答引擎:", self.qa_service_combo)
+        
+        main_layout.addWidget(qa_group)
+        
+        # 问答引擎环境变量配置组
+        self.qa_env_group = QGroupBox("问答引擎环境变量")
+        self.qa_env_layout = QFormLayout(self.qa_env_group)
+        self.qa_env_layout.setSpacing(10)
+        
+        main_layout.addWidget(self.qa_env_group)
         
         # 添加弹性空间
         spacer = QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
@@ -511,7 +532,38 @@ class TranslationConfigDialog(QDialog):
         
         # 初始化显示
         self.on_service_changed(self.service_combo.currentText())
+        self.on_qa_service_changed(self.qa_service_combo.currentText())
         
+    def on_qa_service_changed(self, service):
+        """问答引擎改变时的处理"""
+        # 清除之前的问答引擎环境变量输入框
+        while self.qa_env_layout.rowCount() > 0:
+            self.qa_env_layout.removeRow(0)
+        
+        if service == "silicon":
+            # 创建Silicon问答配置控件
+            self.qa_silicon_api_key = QLineEdit()
+            self.qa_silicon_api_key.setPlaceholderText("请输入Silicon API Key")
+            self.qa_silicon_model = QLineEdit()
+            self.qa_silicon_model.setPlaceholderText("例如: Qwen/Qwen2.5-7B-Instruct")
+            
+            self.qa_env_layout.addRow("API Key:", self.qa_silicon_api_key)
+            self.qa_env_layout.addRow("模型:", self.qa_silicon_model)
+        elif service == "ollama":
+            # 创建Ollama问答配置控件
+            self.qa_ollama_host = QLineEdit()
+            self.qa_ollama_host.setPlaceholderText("例如: http://127.0.0.1:11434")
+            self.qa_ollama_model = QLineEdit()
+            self.qa_ollama_model.setPlaceholderText("例如: deepseek-r1:1.5b")
+            
+            self.qa_env_layout.addRow("服务地址:", self.qa_ollama_host)
+            self.qa_env_layout.addRow("模型:", self.qa_ollama_model)
+        else:
+            # 关闭问答引擎
+            info_label = QLabel("问答引擎已关闭")
+            info_label.setStyleSheet("color: #6c757d; font-style: italic;")
+            self.qa_env_layout.addRow(info_label)
+            
     def on_service_changed(self, service):
         """翻译引擎改变时的处理"""
         # 清除之前的环境变量输入框
@@ -555,6 +607,12 @@ class TranslationConfigDialog(QDialog):
             "envs": {}
         }
         
+        # 默认问答配置
+        self.current_qa_config = {
+            "service": "关闭",
+            "envs": {}
+        }
+        
         # 从统一配置文件加载
         config_file = "pdf2zh_config.json"
         if os.path.exists(config_file):
@@ -563,6 +621,8 @@ class TranslationConfigDialog(QDialog):
                     full_config = json.load(f)
                     if "translation" in full_config:
                         self.current_config.update(full_config["translation"])
+                    if "qa_engine" in full_config:
+                        self.current_qa_config.update(full_config["qa_engine"])
             except Exception as e:
                 print(f"读取配置失败: {e}")
                 
@@ -602,14 +662,36 @@ class TranslationConfigDialog(QDialog):
             except Exception as e:
                 print(f"读取现有配置失败: {e}")
         
+        # 收集问答引擎配置
+        qa_config = {
+            "service": self.qa_service_combo.currentText(),
+            "envs": {}
+        }
+        
+        # 收集问答引擎环境变量
+        qa_service = qa_config["service"]
+        if qa_service == "silicon":
+            if hasattr(self, 'qa_silicon_api_key') and self.qa_silicon_api_key.text().strip():
+                qa_config["envs"]["SILICON_API_KEY"] = self.qa_silicon_api_key.text().strip()
+            if hasattr(self, 'qa_silicon_model') and self.qa_silicon_model.text().strip():
+                qa_config["envs"]["SILICON_MODEL"] = self.qa_silicon_model.text().strip()
+        elif qa_service == "ollama":
+            if hasattr(self, 'qa_ollama_host') and self.qa_ollama_host.text().strip():
+                qa_config["envs"]["OLLAMA_HOST"] = self.qa_ollama_host.text().strip()
+            if hasattr(self, 'qa_ollama_model') and self.qa_ollama_model.text().strip():
+                qa_config["envs"]["OLLAMA_MODEL"] = self.qa_ollama_model.text().strip()
+        
         # 更新翻译配置部分
         full_config["translation"] = config
+        # 更新问答引擎配置部分
+        full_config["qa_engine"] = qa_config
         
         # 保存到统一配置文件
         with open(config_file, 'w', encoding='utf-8') as f:
             json.dump(full_config, f, indent=4, ensure_ascii=False)
             
         self.current_config = config
+        self.current_qa_config = qa_config
         
     def apply_current_config(self):
         """应用当前配置到UI"""
@@ -642,6 +724,23 @@ class TranslationConfigDialog(QDialog):
         if hasattr(self, 'ollama_model') and "OLLAMA_MODEL" in envs:
             self.ollama_model.setText(envs["OLLAMA_MODEL"])
             
+        # 设置问答引擎
+        qa_service = self.current_qa_config.get("service", "关闭")
+        index = self.qa_service_combo.findText(qa_service)
+        if index >= 0:
+            self.qa_service_combo.setCurrentIndex(index)
+            
+        # 设置问答引擎环境变量
+        qa_envs = self.current_qa_config.get("envs", {})
+        if hasattr(self, 'qa_silicon_api_key') and "SILICON_API_KEY" in qa_envs:
+            self.qa_silicon_api_key.setText(qa_envs["SILICON_API_KEY"])
+        if hasattr(self, 'qa_silicon_model') and "SILICON_MODEL" in qa_envs:
+            self.qa_silicon_model.setText(qa_envs["SILICON_MODEL"])
+        if hasattr(self, 'qa_ollama_host') and "OLLAMA_HOST" in qa_envs:
+            self.qa_ollama_host.setText(qa_envs["OLLAMA_HOST"])
+        if hasattr(self, 'qa_ollama_model') and "OLLAMA_MODEL" in qa_envs:
+            self.qa_ollama_model.setText(qa_envs["OLLAMA_MODEL"])
+            
     def showEvent(self, event):
         """显示对话框时应用配置"""
         super().showEvent(event)
@@ -654,4 +753,693 @@ class TranslationConfigDialog(QDialog):
         
     def get_config(self):
         """获取当前配置"""
-        return self.current_config.copy() 
+        return self.current_config.copy()
+        
+    def get_qa_config(self):
+        """获取问答引擎配置"""
+        return self.current_qa_config.copy()
+
+
+class QADialog(QDialog):
+    """问答对话框"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("智能问答")
+        self.setModal(False)
+        self.resize(600, 700)
+        
+        # 对话历史
+        self.chat_history = []
+        self.pdf_content = ""
+        self.current_response = ""  # 当前AI回答
+        
+        # 创建问答引擎管理器
+        from core.qa_engine import QAEngineManager
+        self.qa_manager = QAEngineManager(self)
+        
+        self.setup_ui()
+        
+    def setup_ui(self):
+        """设置UI界面"""
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(10)
+        
+        # 标题区域
+        title_layout = QHBoxLayout()
+        title_label = QLabel("📚 PDF智能问答")
+        title_label.setStyleSheet("""
+            QLabel {
+                font-size: 18px;
+                font-weight: bold;
+                color: #333;
+                padding: 10px 0;
+            }
+        """)
+        title_layout.addWidget(title_label)
+        
+        # 关闭按钮
+        close_btn = QPushButton("×")
+        close_btn.setFixedSize(30, 30)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                border-radius: 15px;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+            }
+        """)
+        close_btn.clicked.connect(self.hide)
+        title_layout.addStretch()
+        title_layout.addWidget(close_btn)
+        
+        main_layout.addLayout(title_layout)
+        
+        # 对话显示区域
+        from PyQt6.QtWidgets import QTextEdit
+        self.chat_display = QTextEdit()
+        self.chat_display.setReadOnly(True)
+        self.chat_display.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                padding: 15px;
+                background-color: #f8f9fa;
+                font-size: 14px;
+                line-height: 1.5;
+            }
+        """)
+        self.chat_display.setPlaceholderText("对话内容将在这里显示...")
+        main_layout.addWidget(self.chat_display)
+        
+        # 输入区域
+        input_layout = QVBoxLayout()
+        
+        # 问题输入框
+        self.question_input = QTextEdit()
+        self.question_input.setMaximumHeight(120)
+        self.question_input.setStyleSheet("""
+            QTextEdit {
+                border: 2px solid #007acc;
+                border-radius: 8px;
+                padding: 10px;
+                font-size: 14px;
+                background-color: white;
+            }
+            QTextEdit:focus {
+                border-color: #0056b3;
+            }
+        """)
+        self.question_input.setPlaceholderText("请输入您的问题...")
+        input_layout.addWidget(self.question_input)
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        
+        # 清空对话按钮
+        clear_btn = QPushButton("清空对话")
+        clear_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6c757d;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 6px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #5a6268;
+            }
+        """)
+        clear_btn.clicked.connect(self.clear_chat)
+        button_layout.addWidget(clear_btn)
+        
+        button_layout.addStretch()
+        
+        # 发送按钮
+        self.send_btn = QPushButton("发送问题")
+        self.send_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #007acc;
+                color: white;
+                border: none;
+                padding: 10px 30px;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #0056b3;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+            }
+        """)
+        self.send_btn.clicked.connect(self.send_question)
+        button_layout.addWidget(self.send_btn)
+        
+        input_layout.addLayout(button_layout)
+        main_layout.addLayout(input_layout)
+        
+        # 状态栏
+        self.status_label = QLabel("准备就绪")
+        self.status_label.setStyleSheet("""
+            QLabel {
+                color: #6c757d;
+                font-size: 12px;
+                padding: 5px;
+            }
+        """)
+        main_layout.addWidget(self.status_label)
+        
+    def set_pdf_content(self, content):
+        """设置PDF内容"""
+        self.pdf_content = content
+        self.status_label.setText(f"已加载PDF内容 ({len(content)} 字符)")
+        
+    def clear_chat(self):
+        """清空对话历史"""
+        self.chat_history.clear()
+        self.chat_display.clear()
+        self.status_label.setText("对话已清空")
+        
+
+        
+    def add_message(self, sender, message):
+        """添加消息到对话显示区域"""
+        timestamp = __import__('datetime').datetime.now().strftime("%H:%M:%S")
+        
+        if sender == "用户":
+            html = f"""
+            <div style="margin-bottom: 15px;">
+                <div style="color: #007acc; font-weight: bold; margin-bottom: 5px;">
+                    👤 {sender} [{timestamp}]
+                </div>
+                <div style="background-color: #e3f2fd; padding: 10px; border-radius: 8px; border-left: 4px solid #007acc;">
+                    {message}
+                </div>
+            </div>
+            """
+        else:
+            html = f"""
+            <div style="margin-bottom: 15px;">
+                <div style="color: #28a745; font-weight: bold; margin-bottom: 5px;">
+                    🤖 {sender} [{timestamp}]
+                </div>
+                <div style="background-color: #f8f9fa; padding: 10px; border-radius: 8px; border-left: 4px solid #28a745;">
+                    {message}
+                </div>
+            </div>
+            """
+        
+        self.chat_display.insertHtml(html)
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self.chat_display.setTextCursor(cursor)
+        
+    def process_question(self, question):
+        """处理问题"""
+        # 重置当前回答
+        self.current_response = ""
+        
+        # 开始AI问答
+        self.qa_manager.start_qa(
+            question=question,
+            pdf_content=self.pdf_content,
+            chat_history=self.chat_history,
+            chunk_callback=self.on_response_chunk,
+            completed_callback=self.on_response_completed,
+            failed_callback=self.on_response_failed
+        )
+        
+    def on_response_chunk(self, chunk):
+        """处理AI回答片段"""
+        self.current_response += chunk
+        
+        # 实时更新AI回答显示
+        timestamp = __import__('datetime').datetime.now().strftime("%H:%M:%S")
+        
+        # 如果是第一个chunk，添加AI消息头
+        if len(self.current_response) == len(chunk):
+            html = f"""
+            <div style="margin-bottom: 15px;" id="current-ai-response">
+                <div style="color: #28a745; font-weight: bold; margin-bottom: 5px;">
+                    🤖 AI助手 [{timestamp}]
+                </div>
+                <div style="background-color: #f8f9fa; padding: 10px; border-radius: 8px; border-left: 4px solid #28a745;">
+                    {self.current_response}
+                </div>
+            </div>
+            """
+            self.chat_display.insertHtml(html)
+        else:
+            # 更新现有的AI回答内容
+            cursor = self.chat_display.textCursor()
+            cursor.movePosition(cursor.MoveOperation.End)
+            
+            # 查找并更新最后一个AI回答
+            content = self.chat_display.toHtml()
+            if "current-ai-response" in content:
+                # 简单替换最后的回答内容
+                updated_html = f"""
+                <div style="margin-bottom: 15px;" id="current-ai-response">
+                    <div style="color: #28a745; font-weight: bold; margin-bottom: 5px;">
+                        🤖 AI助手 [{timestamp}] (思考中...)
+                    </div>
+                    <div style="background-color: #f8f9fa; padding: 10px; border-radius: 8px; border-left: 4px solid #28a745;">
+                        {self.current_response}
+                    </div>
+                </div>
+                """
+                
+                # 重新设置内容（简化处理）
+                lines = content.split('\n')
+                for i, line in enumerate(lines):
+                    if 'id="current-ai-response"' in line:
+                        # 找到开始位置，替换到对应的结束div
+                        start_idx = i
+                        div_count = 0
+                        end_idx = start_idx
+                        for j in range(start_idx, len(lines)):
+                            if '<div' in lines[j]:
+                                div_count += 1
+                            if '</div>' in lines[j]:
+                                div_count -= 1
+                                if div_count == 0:
+                                    end_idx = j
+                                    break
+                        
+                        # 替换内容
+                        new_lines = lines[:start_idx] + [updated_html] + lines[end_idx+1:]
+                        new_content = '\n'.join(new_lines)
+                        
+                        # 保存当前滚动位置
+                        scrollbar = self.chat_display.verticalScrollBar()
+                        current_pos = scrollbar.value()
+                        max_pos = scrollbar.maximum()
+                        at_bottom = (current_pos >= max_pos - 10)
+                        
+                        self.chat_display.setHtml(new_content)
+                        
+                        # 如果之前在底部，保持在底部
+                        if at_bottom:
+                            scrollbar.setValue(scrollbar.maximum())
+                        else:
+                            scrollbar.setValue(current_pos)
+                        break
+        
+        # 滚动到底部
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self.chat_display.setTextCursor(cursor)
+        
+    def on_response_completed(self):
+        """AI回答完成"""
+        # 保存到对话历史
+        self.chat_history.append({
+            "question": self.question_input.toPlainText().strip() if hasattr(self, '_last_question') else "",
+            "answer": self.current_response
+        })
+        
+        # 恢复发送按钮
+        self.send_btn.setEnabled(True)
+        self.send_btn.setText("发送问题")
+        self.status_label.setText("回答完成")
+        
+        # 移除临时ID标记
+        content = self.chat_display.toHtml()
+        content = content.replace('id="current-ai-response"', '')
+        content = content.replace('(思考中...)', '')
+        self.chat_display.setHtml(content)
+        
+    def on_response_failed(self, error_message):
+        """AI回答失败"""
+        self.add_message("系统", f"回答失败: {error_message}")
+        
+        # 恢复发送按钮
+        self.send_btn.setEnabled(True)
+        self.send_btn.setText("发送问题")
+        self.status_label.setText(f"回答失败: {error_message}")
+        
+    def send_question(self):
+        """发送问题"""
+        question = self.question_input.toPlainText().strip()
+        if not question:
+            return
+            
+        # 保存问题用于历史记录
+        self._last_question = question
+        
+        # 添加用户问题到显示区域
+        self.add_message("用户", question)
+        self.question_input.clear()
+        
+        # 禁用发送按钮
+        self.send_btn.setEnabled(False)
+        self.send_btn.setText("思考中...")
+        self.status_label.setText("正在生成回答...")
+        
+        # 调用AI问答功能
+        self.process_question(question)
+
+
+class ChatInputWidget(QTextEdit):
+    """支持回车发送的聊天输入框"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent_widget = parent
+        
+    def keyPressEvent(self, event):
+        """处理键盘事件"""
+        from PyQt6.QtCore import Qt
+        
+        # 检查是否按下回车键（不是Shift+回车）
+        if event.key() == Qt.Key.Key_Return and event.modifiers() != Qt.KeyboardModifier.ShiftModifier:
+            # 发送消息
+            if hasattr(self.parent_widget, 'send_question'):
+                self.parent_widget.send_question()
+        else:
+            # 其他按键正常处理
+            super().keyPressEvent(event)
+
+
+class EmbeddedQAWidget(QWidget):
+    """嵌入式问答组件"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        # 对话历史
+        self.chat_history = []
+        self.pdf_content = ""
+        self.current_response = ""  # 当前AI回答
+        
+        # 创建问答引擎管理器
+        from core.qa_engine import QAEngineManager
+        self.qa_manager = QAEngineManager(self)
+        
+        self.setup_ui()
+        
+    def setup_ui(self):
+        """设置UI界面"""
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(8)
+        
+        # 标题区域
+        title_label = QLabel("📚 智能问答")
+        title_label.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                font-weight: bold;
+                color: #333;
+                padding: 8px 0;
+                border-bottom: 2px solid #007acc;
+            }
+        """)
+        main_layout.addWidget(title_label)
+        
+        # 对话显示区域 - 使用简单文本格式
+        from PyQt6.QtWidgets import QTextBrowser, QTextEdit
+        self.chat_display = QTextEdit()
+        self.chat_display.setReadOnly(True)
+        self.chat_display.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                padding: 15px;
+                background-color: white;
+                font-size: 14px;
+                line-height: 1.8;
+                font-family: 'Consolas', 'Microsoft YaHei', monospace;
+            }
+        """)
+        self.chat_display.setPlaceholderText("对话内容将在这里显示...")
+        main_layout.addWidget(self.chat_display)
+        
+        # 输入区域
+        input_layout = QVBoxLayout()
+        
+        # 问题输入框 - 支持回车发送
+        self.question_input = ChatInputWidget(self)
+        self.question_input.setMaximumHeight(80)
+        self.question_input.setStyleSheet("""
+            QTextEdit {
+                border: 2px solid #007acc;
+                border-radius: 6px;
+                padding: 8px;
+                font-size: 13px;
+                background-color: white;
+            }
+            QTextEdit:focus {
+                border-color: #0056b3;
+            }
+        """)
+        self.question_input.setPlaceholderText("请输入您的问题...（按回车发送，Shift+回车换行）")
+        input_layout.addWidget(self.question_input)
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        
+        # 清空对话按钮
+        clear_btn = QPushButton("清空")
+        clear_btn.setFixedSize(50, 28)
+        clear_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6c757d;
+                color: white;
+                border: none;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #5a6268;
+            }
+        """)
+        clear_btn.clicked.connect(self.clear_chat)
+        button_layout.addWidget(clear_btn)
+        
+        button_layout.addStretch()
+        
+        # 发送按钮
+        self.send_btn = QPushButton("发送")
+        self.send_btn.setFixedSize(60, 28)
+        self.send_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #007acc;
+                color: white;
+                border: none;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #0056b3;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+            }
+        """)
+        self.send_btn.clicked.connect(self.send_question)
+        button_layout.addWidget(self.send_btn)
+        
+        input_layout.addLayout(button_layout)
+        main_layout.addLayout(input_layout)
+        
+        # 状态栏
+        self.status_label = QLabel("准备就绪")
+        self.status_label.setStyleSheet("""
+            QLabel {
+                color: #6c757d;
+                font-size: 11px;
+                padding: 2px;
+            }
+        """)
+        main_layout.addWidget(self.status_label)
+        
+        # 初始设置为显示
+        self.setVisible(True)
+        
+    def set_pdf_content(self, content):
+        """设置PDF内容"""
+        self.pdf_content = content
+        self.status_label.setText(f"已加载PDF内容 ({len(content)} 字符)")
+        
+    def clear_chat(self):
+        """清空对话历史"""
+        self.chat_history.clear()
+        self.chat_display.clear()
+        # 添加简洁的欢迎信息
+        welcome_msg = """🎉 智能问答面板
+
+💡 提示: 请先打开PDF文件，然后就可以开始提问了！
+
+"""
+        self.chat_display.setPlainText(welcome_msg)
+        self.status_label.setText("对话已清空")
+        
+    def show_widget(self):
+        """显示组件"""
+        self.setVisible(True)
+        
+    def hide_widget(self):
+        """隐藏组件"""
+        self.setVisible(False)
+        
+    def toggle_widget(self):
+        """切换显示/隐藏"""
+        self.setVisible(not self.isVisible())
+        
+    def send_question(self):
+        """发送问题"""
+        question = self.question_input.toPlainText().strip()
+        if not question:
+            return
+            
+        # 保存问题用于历史记录
+        self._last_question = question
+        
+        # 添加用户问题到显示区域
+        self.add_message("用户", question)
+        self.question_input.clear()
+        
+        # 禁用发送按钮
+        self.send_btn.setEnabled(False)
+        self.send_btn.setText("思考中...")
+        self.status_label.setText("正在生成回答...")
+        
+        # 调用AI问答功能
+        self.process_question(question)
+        
+
+    
+    def add_message(self, sender, message):
+        """添加消息到对话显示区域"""
+        timestamp = __import__('datetime').datetime.now().strftime("%H:%M:%S")
+        
+        # 构建清晰的纯文本格式
+        if sender == "用户":
+            prefix = "👤 用户"
+        elif sender == "AI助手":
+            prefix = "🤖 AI助手"
+        else:
+            prefix = "🔧 系统"
+        
+        # 构建简洁消息头
+        header = f"\n{prefix} [{timestamp}]\n"
+        
+        # 简化消息内容处理，保持LaTeX原样
+        formatted_message = self._format_simple_text(message)
+        
+        # 添加消息
+        full_message = header + formatted_message + "\n"
+        
+        # 添加到显示区域
+        self.chat_display.append(full_message)
+        
+        # 确保滚动到底部
+        self.chat_display.ensureCursorVisible()
+    
+    def _format_simple_text(self, text):
+        """简单文本格式化，保持LaTeX公式原样"""
+        # 基本的文本处理，不转换LaTeX
+        lines = text.split('\n')
+        formatted_lines = []
+        
+        for line in lines:
+            # 检测LaTeX公式行（以\[开头或包含数学符号）
+            if '\\[' in line or '\\]' in line or line.startswith('$$') or line.endswith('$$'):
+                # 公式行，添加缩进和标记
+                formatted_lines.append(f"    📐 公式: {line}")
+            elif line.strip().startswith('```') or line.strip().endswith('```'):
+                # 代码块
+                formatted_lines.append(f"    💻 代码: {line}")
+            elif '**' in line:
+                # 粗体文本，简单标记
+                line = line.replace('**', '【')
+                formatted_lines.append(f"    {line}")
+            else:
+                # 普通文本
+                if line.strip():
+                    formatted_lines.append(f"    {line}")
+                else:
+                    formatted_lines.append("")
+        
+        return '\n'.join(formatted_lines)
+        
+    def process_question(self, question):
+        """处理问题"""
+        # 重置当前回答
+        self.current_response = ""
+        
+        # 开始AI问答
+        self.qa_manager.start_qa(
+            question=question,
+            pdf_content=self.pdf_content,
+            chat_history=self.chat_history,
+            chunk_callback=self.on_response_chunk,
+            completed_callback=self.on_response_completed,
+            failed_callback=self.on_response_failed
+        )
+        
+    def on_response_chunk(self, chunk):
+        """处理AI回答片段"""
+        self.current_response += chunk
+        
+        # 如果是第一个chunk，添加AI消息头
+        if len(self.current_response) == len(chunk):
+            timestamp = __import__('datetime').datetime.now().strftime("%H:%M:%S")
+            
+            # 添加简洁AI消息头
+            header = f"\n🤖 AI助手 [{timestamp}]\n"
+            self.chat_display.append(header)
+            
+            # 记录开始位置
+            self._ai_start_position = len(self.chat_display.toPlainText())
+        
+        # 实时更新显示（简单文本追加）
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        cursor.insertText(chunk)
+        self.chat_display.setTextCursor(cursor)
+        
+        # 自动滚动到底部
+        self.chat_display.ensureCursorVisible()
+        
+    def on_response_completed(self):
+        """AI回答完成"""
+        # 保存到对话历史
+        self.chat_history.append({
+            "question": getattr(self, '_last_question', ""),
+            "answer": self.current_response
+        })
+        
+        # 添加简单的换行分隔
+        self.chat_display.append("\n")
+        
+        # 恢复发送按钮
+        self.send_btn.setEnabled(True)
+        self.send_btn.setText("发送")
+        self.status_label.setText("回答完成")
+        
+        # 滚动到底部
+        self.chat_display.ensureCursorVisible()
+        
+    def on_response_failed(self, error_message):
+        """AI回答失败"""
+        self.add_message("系统", f"回答失败: {error_message}")
+        
+        # 恢复发送按钮
+        self.send_btn.setEnabled(True)
+        self.send_btn.setText("发送")
+        self.status_label.setText(f"回答失败: {error_message}")

@@ -19,7 +19,13 @@ from PyQt6.QtWidgets import (
 )
 
 from core.translation import TranslationManager
-from ui.components import DragDropOverlay, StatusLabel, TranslationConfigDialog
+from ui.components import (
+    DragDropOverlay,
+    EmbeddedQAWidget,
+    QADialog,
+    StatusLabel,
+    TranslationConfigDialog,
+)
 from ui.pdf_widget import PDFWidget
 
 
@@ -40,9 +46,16 @@ class MainWindow(QMainWindow):
         self.current_file = None
         self.translation_manager = TranslationManager()
         self._pending_zoom_value = None
+        self.qa_panel_visible = True  # 问答面板显示状态
         
         # 创建拖拽提示覆盖层
         self.drag_overlay = DragDropOverlay(self)
+        
+        # 创建问答对话框（保留兼容性）
+        self.qa_dialog = QADialog(self)
+        
+        # 创建嵌入式问答组件
+        self.embedded_qa = EmbeddedQAWidget(self)
         
         # 创建UI
         self.setup_ui()
@@ -103,10 +116,32 @@ class MainWindow(QMainWindow):
         
         toolbar_layout.addStretch()
         
+        # 智能问答按钮 - 放到最右边，默认显示状态
+        self.qa_btn = QPushButton("关闭问答")
+        self.qa_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #17a2b8;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #138496;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        # 开局不需要置灰，直接可用
+        toolbar_layout.addWidget(self.qa_btn)
+        
         main_layout.addLayout(toolbar_layout)
         
-        # 分割器 - 左右两个预览区
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        # 主分割器 - 左中右三栏布局
+        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
         
         # 左侧预览区（原始PDF）
         left_frame = QFrame()
@@ -116,8 +151,8 @@ class MainWindow(QMainWindow):
         
         # 左侧标题
         left_title = QLabel("原始文档")
-        left_title.setFixedHeight(35)  # 设置固定高度
-        left_title.setAlignment(Qt.AlignmentFlag.AlignCenter)  # 居中对齐
+        left_title.setFixedHeight(35)
+        left_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_title.setStyleSheet("""
             QLabel {
                 background-color: #f8f9fa;
@@ -134,17 +169,17 @@ class MainWindow(QMainWindow):
         self.left_pdf_widget = PDFWidget()
         left_layout.addWidget(self.left_pdf_widget)
         
-        # 右侧预览区（翻译PDF）
-        right_frame = QFrame()
-        right_frame.setFrameStyle(QFrame.Shape.StyledPanel)
-        right_layout = QVBoxLayout(right_frame)
-        right_layout.setContentsMargins(2, 2, 2, 2)
+        # 中间区域：翻译文档
+        middle_frame = QFrame()
+        middle_frame.setFrameStyle(QFrame.Shape.StyledPanel)
+        middle_layout = QVBoxLayout(middle_frame)
+        middle_layout.setContentsMargins(2, 2, 2, 2)
         
-        # 右侧标题
-        right_title = QLabel("翻译文档")
-        right_title.setFixedHeight(35)  # 设置固定高度
-        right_title.setAlignment(Qt.AlignmentFlag.AlignCenter)  # 居中对齐
-        right_title.setStyleSheet("""
+        # 中间标题
+        middle_title = QLabel("翻译文档")
+        middle_title.setFixedHeight(35)
+        middle_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        middle_title.setStyleSheet("""
             QLabel {
                 background-color: #f8f9fa;
                 padding: 8px;
@@ -154,21 +189,61 @@ class MainWindow(QMainWindow):
                 font-size: 14px;
             }
         """)
-        right_layout.addWidget(right_title)
+        middle_layout.addWidget(middle_title)
         
-        # 右侧PDF查看器
+        # 中间PDF查看器
         self.right_pdf_widget = PDFWidget()
-        right_layout.addWidget(self.right_pdf_widget)
+        middle_layout.addWidget(self.right_pdf_widget)
+        
+        # 右侧问答面板
+        qa_panel_frame = QFrame()
+        qa_panel_frame.setFrameStyle(QFrame.Shape.StyledPanel)
+        qa_panel_frame.setMaximumWidth(500)  # 设置最大宽度
+        qa_panel_frame.setMinimumWidth(250)  # 设置最小宽度
+        qa_panel_layout = QVBoxLayout(qa_panel_frame)
+        qa_panel_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 问答面板标题
+        qa_title = QLabel("智能问答")
+        qa_title.setFixedHeight(35)
+        qa_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        qa_title.setStyleSheet("""
+            QLabel {
+                background-color: #17a2b8;
+                color: white;
+                padding: 8px;
+                border-bottom: 1px solid #138496;
+                font-weight: bold;
+                font-size: 14px;
+            }
+        """)
+        qa_panel_layout.addWidget(qa_title)
+        
+        # 嵌入问答组件
+        qa_panel_layout.addWidget(self.embedded_qa)
+        
+        # 初始化问答面板，显示欢迎信息
+        self.embedded_qa.add_message("系统", "欢迎使用智能问答功能！请先打开PDF文件，然后就可以开始对话了。")
         
         # 保存right_frame的引用，用于后续定位
-        self.right_frame = right_frame
+        self.right_frame = middle_frame
         
-        # 添加到分割器
-        self.splitter.addWidget(left_frame)
-        self.splitter.addWidget(right_frame)
-        self.splitter.setSizes([800, 800])  # 初始均分
+        # 添加到主分割器
+        self.main_splitter.addWidget(left_frame)
+        self.main_splitter.addWidget(middle_frame)
+        self.main_splitter.addWidget(qa_panel_frame)
         
-        main_layout.addWidget(self.splitter)
+        # 设置初始比例：左侧30%，中间45%，右侧25%（默认显示）
+        # 使用更大的初始值确保布局正确
+        self.main_splitter.setSizes([300, 450, 250])
+        
+        # 设置最小尺寸
+        self.main_splitter.setChildrenCollapsible(False)
+        
+        # 保存问答面板引用
+        self.qa_panel = qa_panel_frame
+        
+        main_layout.addWidget(self.main_splitter)
         
 
         
@@ -188,6 +263,7 @@ class MainWindow(QMainWindow):
         # 文件操作
         self.open_btn.clicked.connect(self.open_file)
         self.config_btn.clicked.connect(self.open_config)
+        self.qa_btn.clicked.connect(self.toggle_qa_widget)
         
         # PDF查看器信号
         self.left_pdf_widget.text_selected.connect(self.on_text_selected)
@@ -215,6 +291,141 @@ class MainWindow(QMainWindow):
             # 配置已保存，可以在这里添加其他处理逻辑
             self.status_label.set_status("翻译配置已更新", "success")
             
+    @pyqtSlot()
+    def toggle_qa_widget(self):
+        """切换智能问答面板显示/隐藏"""
+        if self.qa_panel_visible:
+            # 隐藏问答面板
+            self.qa_panel_visible = False
+            self.qa_btn.setText("智能问答")
+            
+            # 直接隐藏面板
+            self.qa_panel.setVisible(False)
+            
+            # 调整二栏分割器：左侧40%，中间60%
+            total_width = self.main_splitter.width()
+            if total_width > 100:
+                sizes = [int(total_width * 0.4), int(total_width * 0.6)]
+            else:
+                sizes = [400, 600]
+            
+            # 只设置前两栏的大小
+            current_sizes = self.main_splitter.sizes()
+            new_sizes = [sizes[0], sizes[1], current_sizes[2]]  # 保持第三栏原样
+            self.main_splitter.setSizes(new_sizes)
+            
+            print(f"隐藏面板 - 设置可见性: False")
+        else:
+            # 显示问答面板
+            self.qa_panel_visible = True
+            self.qa_btn.setText("关闭问答")
+            
+            # 直接显示面板
+            self.qa_panel.setVisible(True)
+            
+            # 检查当前状态并更新提示信息
+            self._update_qa_panel_status()
+            
+            # 调整三栏分割器：左侧37.5%，中间37.5%，右侧25%（左边两个容器宽度一致）
+            total_width = self.main_splitter.width()
+            if total_width > 100:
+                sizes = [int(total_width * 0.375), int(total_width * 0.375), int(total_width * 0.25)]
+            else:
+                sizes = [375, 375, 250]
+            self.main_splitter.setSizes(sizes)
+            
+            print(f"显示面板 - 设置可见性: True, 分割器大小: {sizes}")
+            
+        # 强制刷新布局
+        self.main_splitter.update()
+        
+        # 延迟检查实际结果
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, lambda: print(f"实际结果 - qa_panel可见: {self.qa_panel.isVisible()}, 宽度: {self.qa_panel.width()}"))
+    
+    def _update_qa_panel_status(self):
+        """更新问答面板的状态信息"""
+        # 检查问答引擎配置
+        if not self._check_qa_engine_config():
+            # 配置有问题，在面板内显示提示
+            self.embedded_qa.clear_chat()
+            self.embedded_qa.add_message("系统", "问答引擎未配置或配置有误，请先在翻译配置中正确配置问答引擎")
+        elif not self.current_file:
+            # 没有PDF文件，在面板内显示提示
+            self.embedded_qa.clear_chat() 
+            self.embedded_qa.add_message("系统", "请先打开PDF文件，然后即可开始智能问答")
+        else:
+            # 提取PDF文本内容（仅在首次显示时）
+            if not self.embedded_qa.pdf_content:
+                pdf_text = self._extract_pdf_text()
+                if not pdf_text:
+                    self.embedded_qa.clear_chat()
+                    self.embedded_qa.add_message("系统", "无法提取PDF文本内容，请检查PDF文件是否正常")
+                else:
+                    self.embedded_qa.set_pdf_content(pdf_text)
+                    # 如果成功加载了PDF内容，只清空聊天记录，不显示提示
+                    self.embedded_qa.clear_chat()
+        
+    def _check_qa_engine_config(self):
+        """检查问答引擎配置"""
+        import json
+        import os
+        
+        config_file = "pdf2zh_config.json"
+        if not os.path.exists(config_file):
+            return False
+            
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                qa_config = config.get("qa_engine", {})
+                
+                if qa_config.get("service", "关闭") == "关闭":
+                    return False
+                    
+                # 检查必要的配置项
+                service = qa_config.get("service")
+                envs = qa_config.get("envs", {})
+                
+                if service == "silicon":
+                    if not envs.get("SILICON_API_KEY") or not envs.get("SILICON_MODEL"):
+                        return False
+                elif service == "ollama":
+                    if not envs.get("OLLAMA_HOST") or not envs.get("OLLAMA_MODEL"):
+                        return False
+                        
+                return True
+                
+        except Exception as e:
+            return False
+            
+    def _extract_pdf_text(self):
+        """提取PDF文本内容"""
+        if not self.current_file:
+            return ""
+            
+        try:
+            import fitz  # PyMuPDF
+            
+            doc = fitz.open(self.current_file)
+            text_content = []
+            
+            for page_num in range(len(doc)):
+                page = doc.load_page(page_num)
+                text = page.get_text()
+                if text.strip():
+                    text_content.append(f"第{page_num + 1}页:\n{text}")
+                    
+            doc.close()
+            
+            full_text = "\n\n".join(text_content)
+            return full_text
+            
+        except Exception as e:
+            print(f"提取PDF文本失败: {e}")
+            return ""
+    
+
     def load_pdf_file(self, file_path):
         """加载PDF文件"""
         try:
@@ -225,6 +436,10 @@ class MainWindow(QMainWindow):
                 # 更新状态
                 filename = os.path.basename(file_path)
                 self.status_label.set_status(f"已加载: {filename}", "success")
+                
+                # 如果问答面板正在显示，更新其状态
+                if self.qa_panel.width() > 10:
+                    self._update_qa_panel_status()
                 
                 # 显示加载动画（不需要隐藏占位符，会被QStackedWidget自动管理）
                 self.show_loading_centered("正在准备翻译...")
