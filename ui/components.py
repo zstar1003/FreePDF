@@ -382,12 +382,12 @@ class DragDropOverlay(QWidget):
 
 
 class TranslationConfigDialog(QDialog):
-    """翻译配置对话框"""
+    """引擎配置对话框"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("翻译配置")
-        self.setFixedSize(480, 500)
+        self.setWindowTitle("引擎配置")
+        self.setFixedSize(480, 720)
         self.setModal(True)
         
         # 加载当前配置
@@ -398,28 +398,66 @@ class TranslationConfigDialog(QDialog):
         
     def setup_ui(self):
         """设置UI界面"""
+        # 设置对话框样式
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #f5f5f5;
+            }
+            QGroupBox {
+                font-weight: bold;
+                color: #333;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                margin-top: 8px;
+                padding-top: 10px;
+                background-color: white;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+            QComboBox, QLineEdit {
+                padding: 4px 8px;
+                border: 1px solid #ccc;
+                border-radius: 3px;
+                background-color: white;
+                min-height: 14px;
+            }
+            QComboBox:focus, QLineEdit:focus {
+                border-color: #007acc;
+            }
+            QComboBox:hover, QLineEdit:hover {
+                border-color: #999;
+            }
+        """)
+        
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(15)
         
         # 标题
-        title_label = QLabel("翻译引擎配置")
+        title_label = QLabel("引擎配置")
         title_label.setStyleSheet("""
             QLabel {
                 font-size: 18px;
                 font-weight: bold;
-                color: #333;
+                color: #007acc;
                 padding: 10px 0;
+                border-bottom: 1px solid #ddd;
+                margin-bottom: 5px;
             }
         """)
         main_layout.addWidget(title_label)
         
-        # 基础配置组
-        basic_group = QGroupBox("基础配置")
+        # 翻译引擎配置组
+        basic_group = QGroupBox("翻译引擎配置")
         basic_layout = QFormLayout(basic_group)
-        basic_layout.setSpacing(10)
+        basic_layout.setSpacing(12)
+        basic_layout.setContentsMargins(15, 25, 15, 25)
+        basic_layout.setVerticalSpacing(15)
         
-                 # 翻译引擎选择
+        # 翻译引擎选择
         self.service_combo = QComboBox()
         self.service_combo.addItems(["bing", "google", "silicon", "ollama"])
         self.service_combo.currentTextChanged.connect(self.on_service_changed)
@@ -453,10 +491,12 @@ class TranslationConfigDialog(QDialog):
         
         main_layout.addWidget(basic_group)
         
-        # 环境变量配置组
-        self.env_group = QGroupBox("翻译引擎环境变量")
+        # 参数配置组
+        self.env_group = QGroupBox("翻译引擎参数")
         self.env_layout = QFormLayout(self.env_group)
-        self.env_layout.setSpacing(10)
+        self.env_layout.setSpacing(12)
+        self.env_layout.setContentsMargins(15, 25, 15, 25)
+        self.env_layout.setVerticalSpacing(15)
         
         # 环境变量输入框会根据服务类型动态创建
         
@@ -465,7 +505,9 @@ class TranslationConfigDialog(QDialog):
         # 问答引擎配置组
         qa_group = QGroupBox("问答引擎配置")
         qa_layout = QFormLayout(qa_group)
-        qa_layout.setSpacing(10)
+        qa_layout.setSpacing(12)
+        qa_layout.setContentsMargins(15, 25, 15, 25)
+        qa_layout.setVerticalSpacing(15)
         
         # 问答引擎选择
         self.qa_service_combo = QComboBox()
@@ -475,10 +517,12 @@ class TranslationConfigDialog(QDialog):
         
         main_layout.addWidget(qa_group)
         
-        # 问答引擎环境变量配置组
-        self.qa_env_group = QGroupBox("问答引擎环境变量")
+        # 问答引擎参数配置组
+        self.qa_env_group = QGroupBox("问答引擎参数")
         self.qa_env_layout = QFormLayout(self.qa_env_group)
-        self.qa_env_layout.setSpacing(10)
+        self.qa_env_layout.setSpacing(12)
+        self.qa_env_layout.setContentsMargins(15, 25, 15, 25)
+        self.qa_env_layout.setVerticalSpacing(15)
         
         main_layout.addWidget(self.qa_env_group)
         
@@ -488,6 +532,7 @@ class TranslationConfigDialog(QDialog):
         
         # 按钮布局
         button_layout = QHBoxLayout()
+        button_layout.setContentsMargins(0, 10, 0, 0)
         button_layout.addStretch()
         
         # 取消按钮
@@ -505,9 +550,15 @@ class TranslationConfigDialog(QDialog):
             QPushButton:hover {
                 background-color: #5a6268;
             }
+            QPushButton:pressed {
+                background-color: #495057;
+            }
         """)
         cancel_btn.clicked.connect(self.reject)
         button_layout.addWidget(cancel_btn)
+        
+        # 添加按钮间距
+        button_layout.addSpacing(10)
         
         # 确定按钮
         ok_btn = QPushButton("确定")
@@ -523,6 +574,9 @@ class TranslationConfigDialog(QDialog):
             }
             QPushButton:hover {
                 background-color: #005a9e;
+            }
+            QPushButton:pressed {
+                background-color: #004085;
             }
         """)
         ok_btn.clicked.connect(self.accept)

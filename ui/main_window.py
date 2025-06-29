@@ -106,7 +106,7 @@ class MainWindow(QMainWindow):
         toolbar_layout.addWidget(self.open_btn)
         
         # 配置按钮
-        self.config_btn = QPushButton("翻译配置")
+        self.config_btn = QPushButton("引擎配置")
         self.config_btn.setStyleSheet("""
             QPushButton {
                 background-color: #28a745;
