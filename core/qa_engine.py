@@ -7,6 +7,8 @@ from typing import Any, Dict
 import requests
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
+from utils.text_processor import text_processor
+
 
 class QAEngineThread(QThread):
     """AI问答线程"""
@@ -86,7 +88,6 @@ class QAEngineThread(QThread):
                 "model": model,
                 "messages": messages,
                 "stream": True,
-                "max_tokens": 2000,
                 "temperature": 0.7
             }
             
@@ -179,18 +180,48 @@ class QAEngineThread(QThread):
         """构建对话消息"""
         messages = []
         
-        # 系统提示词
-        system_prompt = f"""你是一个专业的PDF文档分析助手。用户上传了一个PDF文档，你需要基于文档内容回答用户的问题。
+        # 获取当前模型名称
+        model_name = self._get_current_model()
+        
+        # 系统提示词模板（不含PDF内容）
+        system_prompt_template = """你是一个专业的PDF文档分析助手。用户上传了一个PDF文档，你需要基于文档内容回答用户的问题。
 
 PDF文档内容如下：
-{self.pdf_content}
+{pdf_content}
 
 请注意：
 1. 请仅基于上述PDF文档内容回答问题
 2. 如果问题与文档内容无关，请明确说明
 3. 回答要准确、详细，并引用相关页面信息
 4. 使用中文回答
+5. 请使用纯文本回答，不要使用任何markdown格式（如 **、##、*、- 等符号），直接用文字表达重点
 """
+        
+        # 计算可用于PDF内容的token数量
+        available_tokens = text_processor.calculate_available_tokens(
+            model_name=model_name,
+            system_prompt=system_prompt_template,
+            chat_history=self.chat_history,
+            current_question=self.question,
+            max_response_tokens=2000
+        )
+        
+        # 智能截断PDF内容
+        processed_pdf_content, was_truncated = text_processor.smart_truncate_pdf_content(
+            pdf_content=self.pdf_content,
+            max_tokens=available_tokens,
+            question=self.question
+        )
+        
+        # 记录截断情况（仅在调试模式下输出）
+        if was_truncated:
+            text_processor.count_tokens(self.pdf_content)
+            text_processor.count_tokens(processed_pdf_content)
+            # 只在确实需要时进行调试输出
+            pass
+        
+        # 构建最终的系统提示词
+        system_prompt = system_prompt_template.format(pdf_content=processed_pdf_content)
         
         messages.append({
             "role": "system",
@@ -215,6 +246,18 @@ PDF文档内容如下：
         })
         
         return messages
+    
+    def _get_current_model(self) -> str:
+        """获取当前使用的模型名称"""
+        service = self.config.get("service", "关闭")
+        envs = self.config.get("envs", {})
+        
+        if service == "silicon":
+            return envs.get("SILICON_MODEL", "deepseek-chat")
+        elif service == "ollama":
+            return envs.get("OLLAMA_MODEL", "llama2")
+        else:
+            return "default"
 
 
 class QAEngineManager(QObject):

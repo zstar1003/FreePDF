@@ -990,27 +990,23 @@ class QADialog(QDialog):
         timestamp = __import__('datetime').datetime.now().strftime("%H:%M:%S")
         
         if sender == "用户":
-            html = f"""
-            <div style="margin-bottom: 15px;">
+            html = f"""<div style="margin-bottom: 15px;">
                 <div style="color: #007acc; font-weight: bold; margin-bottom: 5px;">
                     👤 {sender} [{timestamp}]
                 </div>
                 <div style="background-color: #e3f2fd; padding: 10px; border-radius: 8px; border-left: 4px solid #007acc;">
                     {message}
                 </div>
-            </div>
-            """
+            </div>"""
         else:
-            html = f"""
-            <div style="margin-bottom: 15px;">
+            html = f"""<div style="margin-bottom: 15px;">
                 <div style="color: #28a745; font-weight: bold; margin-bottom: 5px;">
                     🤖 {sender} [{timestamp}]
                 </div>
                 <div style="background-color: #f8f9fa; padding: 10px; border-radius: 8px; border-left: 4px solid #28a745;">
                     {message}
                 </div>
-            </div>
-            """
+            </div>"""
         
         self.chat_display.insertHtml(html)
         cursor = self.chat_display.textCursor()
@@ -1022,6 +1018,9 @@ class QADialog(QDialog):
         # 重置当前回答
         self.current_response = ""
         
+        # 检查PDF内容是否会被截断
+        self._check_and_show_truncation_info(question)
+        
         # 开始AI问答
         self.qa_manager.start_qa(
             question=question,
@@ -1032,6 +1031,59 @@ class QADialog(QDialog):
             failed_callback=self.on_response_failed
         )
         
+    def _check_and_show_truncation_info(self, question):
+        """检查并显示截断信息"""
+        if not self.pdf_content:
+            return
+            
+        # 只在首次对话时显示系统提示
+        if len(self.chat_history) > 0:
+            return
+            
+        try:
+            from core.qa_engine import QAEngineThread
+            from utils.text_processor import text_processor
+            
+            # 创建临时QA线程来获取模型信息
+            temp_thread = QAEngineThread(question, self.pdf_content, self.chat_history)
+            model_name = temp_thread._get_current_model()
+            
+            # 计算可用token
+            system_prompt_template = """你是一个专业的PDF文档分析助手。用户上传了一个PDF文档，你需要基于文档内容回答用户的问题。
+PDF文档内容如下：
+{pdf_content}
+请注意：
+1. 请仅基于上述PDF文档内容回答问题
+2. 如果问题与文档内容无关，请明确说明
+3. 回答要准确、详细，并引用相关页面信息
+4. 使用中文回答
+"""
+            
+            available_tokens = text_processor.calculate_available_tokens(
+                model_name=model_name,
+                system_prompt=system_prompt_template,
+                chat_history=self.chat_history,
+                current_question=question,
+                max_response_tokens=2000
+            )
+            
+            # 检查是否需要截断并显示相应提示
+            original_tokens = text_processor.count_tokens(self.pdf_content)
+            model_limit = text_processor.get_model_token_limit(model_name)
+            
+            if original_tokens > available_tokens:
+                # 显示截断提示
+                truncation_msg = f"💡 提示：PDF内容较长({original_tokens:,} tokens)，已智能截断至{available_tokens:,} tokens以适应{model_name}模型({model_limit:,} tokens限制)。AI将基于最相关的内容回答您的问题。"
+                self.add_message("系统", truncation_msg)
+            else:
+                # 显示未截断提示
+                normal_msg = f"📄 提示：PDF内容({original_tokens:,} tokens)在{model_name}模型限制范围内({model_limit:,} tokens)，AI将基于完整文档内容回答您的问题。"
+                self.add_message("系统", normal_msg)
+                
+        except Exception as e:
+            print(f"检查截断信息时出错: {e}")
+            # 静默失败，不影响正常问答流程
+        
     def on_response_chunk(self, chunk):
         """处理AI回答片段"""
         self.current_response += chunk
@@ -1041,16 +1093,14 @@ class QADialog(QDialog):
         
         # 如果是第一个chunk，添加AI消息头
         if len(self.current_response) == len(chunk):
-            html = f"""
-            <div style="margin-bottom: 15px;" id="current-ai-response">
+            html = f"""<div style="margin-bottom: 15px;" id="current-ai-response">
                 <div style="color: #28a745; font-weight: bold; margin-bottom: 5px;">
                     🤖 AI助手 [{timestamp}]
                 </div>
                 <div style="background-color: #f8f9fa; padding: 10px; border-radius: 8px; border-left: 4px solid #28a745;">
                     {self.current_response}
                 </div>
-            </div>
-            """
+            </div>"""
             self.chat_display.insertHtml(html)
         else:
             # 更新现有的AI回答内容
@@ -1061,16 +1111,14 @@ class QADialog(QDialog):
             content = self.chat_display.toHtml()
             if "current-ai-response" in content:
                 # 简单替换最后的回答内容
-                updated_html = f"""
-                <div style="margin-bottom: 15px;" id="current-ai-response">
+                updated_html = f"""<div style="margin-bottom: 15px;" id="current-ai-response">
                     <div style="color: #28a745; font-weight: bold; margin-bottom: 5px;">
                         🤖 AI助手 [{timestamp}] (思考中...)
                     </div>
                     <div style="background-color: #f8f9fa; padding: 10px; border-radius: 8px; border-left: 4px solid #28a745;">
                         {self.current_response}
                     </div>
-                </div>
-                """
+                </div>"""
                 
                 # 重新设置内容（简化处理）
                 lines = content.split('\n')
@@ -1220,8 +1268,8 @@ class EmbeddedQAWidget(QWidget):
         """)
         main_layout.addWidget(title_label)
         
-        # 对话显示区域 - 使用简单文本格式
-        from PyQt6.QtWidgets import QTextBrowser, QTextEdit
+        # 对话显示区域
+        from PyQt6.QtWidgets import QTextEdit
         self.chat_display = QTextEdit()
         self.chat_display.setReadOnly(True)
         self.chat_display.setStyleSheet("""
@@ -1390,13 +1438,16 @@ class EmbeddedQAWidget(QWidget):
             prefix = "🔧 系统"
         
         # 构建简洁消息头
-        header = f"\n{prefix} [{timestamp}]\n"
+        header = f"{prefix} [{timestamp}]"
         
         # 简化消息内容处理，保持LaTeX原样
         formatted_message = self._format_simple_text(message)
         
-        # 添加消息
-        full_message = header + formatted_message + "\n"
+        # 添加消息（仅在不是第一条消息时加前导换行）
+        if self.chat_display.toPlainText().strip():
+            full_message = "\n" + header + "\n" + formatted_message
+        else:
+            full_message = header + "\n" + formatted_message
         
         # 添加到显示区域
         self.chat_display.append(full_message)
@@ -1421,11 +1472,11 @@ class EmbeddedQAWidget(QWidget):
             elif '**' in line:
                 # 粗体文本，简单标记
                 line = line.replace('**', '【')
-                formatted_lines.append(f"    {line}")
+                formatted_lines.append(line)
             else:
-                # 普通文本
+                # 普通文本，不添加缩进
                 if line.strip():
-                    formatted_lines.append(f"    {line}")
+                    formatted_lines.append(line)
                 else:
                     formatted_lines.append("")
         
@@ -1435,6 +1486,9 @@ class EmbeddedQAWidget(QWidget):
         """处理问题"""
         # 重置当前回答
         self.current_response = ""
+        
+        # 检查PDF内容是否会被截断
+        self._check_and_show_truncation_info(question)
         
         # 开始AI问答
         self.qa_manager.start_qa(
@@ -1446,6 +1500,59 @@ class EmbeddedQAWidget(QWidget):
             failed_callback=self.on_response_failed
         )
         
+    def _check_and_show_truncation_info(self, question):
+        """检查并显示截断信息"""
+        if not self.pdf_content:
+            return
+            
+        # 只在首次对话时显示系统提示
+        if len(self.chat_history) > 0:
+            return
+            
+        try:
+            from core.qa_engine import QAEngineThread
+            from utils.text_processor import text_processor
+            
+            # 创建临时QA线程来获取模型信息
+            temp_thread = QAEngineThread(question, self.pdf_content, self.chat_history)
+            model_name = temp_thread._get_current_model()
+            
+            # 计算可用token
+            system_prompt_template = """你是一个专业的PDF文档分析助手。用户上传了一个PDF文档，你需要基于文档内容回答用户的问题。
+PDF文档内容如下：
+{pdf_content}
+请注意：
+1. 请仅基于上述PDF文档内容回答问题
+2. 如果问题与文档内容无关，请明确说明
+3. 回答要准确、详细，并引用相关页面信息
+4. 使用中文回答
+"""
+            
+            available_tokens = text_processor.calculate_available_tokens(
+                model_name=model_name,
+                system_prompt=system_prompt_template,
+                chat_history=self.chat_history,
+                current_question=question,
+                max_response_tokens=2000
+            )
+            
+            # 检查是否需要截断并显示相应提示
+            original_tokens = text_processor.count_tokens(self.pdf_content)
+            model_limit = text_processor.get_model_token_limit(model_name)
+            
+            if original_tokens > available_tokens:
+                # 显示截断提示
+                truncation_msg = f"💡 提示：PDF内容较长({original_tokens:,} tokens)，已智能截断至{available_tokens:,} tokens以适应{model_name}模型({model_limit:,} tokens限制)。AI将基于最相关的内容回答您的问题。"
+                self.add_message("系统", truncation_msg)
+            else:
+                # 显示未截断提示
+                normal_msg = f"📄 提示：PDF内容({original_tokens:,} tokens)在{model_name}模型限制范围内({model_limit:,} tokens)，AI将基于完整文档内容回答您的问题。"
+                self.add_message("系统", normal_msg)
+                
+        except Exception as e:
+            print(f"检查截断信息时出错: {e}")
+            # 静默失败，不影响正常问答流程
+        
     def on_response_chunk(self, chunk):
         """处理AI回答片段"""
         self.current_response += chunk
@@ -1454,8 +1561,11 @@ class EmbeddedQAWidget(QWidget):
         if len(self.current_response) == len(chunk):
             timestamp = __import__('datetime').datetime.now().strftime("%H:%M:%S")
             
-            # 添加简洁AI消息头
-            header = f"\n🤖 AI助手 [{timestamp}]\n"
+            # 添加简洁AI消息头（仅在不是第一条消息时加前导换行）
+            if self.chat_display.toPlainText().strip():
+                header = f"\n🤖 AI助手 [{timestamp}]"
+            else:
+                header = f"🤖 AI助手 [{timestamp}]"
             self.chat_display.append(header)
             
             # 记录开始位置
@@ -1478,8 +1588,7 @@ class EmbeddedQAWidget(QWidget):
             "answer": self.current_response
         })
         
-        # 添加简单的换行分隔
-        self.chat_display.append("\n")
+        # 不需要额外的换行分隔
         
         # 恢复发送按钮
         self.send_btn.setEnabled(True)
