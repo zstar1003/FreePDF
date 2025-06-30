@@ -1,9 +1,9 @@
 <div align="center">
-  <img src="assets/logo_with_txt.png" width="400" alt="FreePDF">
+  <img src="assets/logo_with_txt.png" width="500" alt="FreePDF">
 </div>
 
 <div align="center">
-  <img src="https://img.shields.io/badge/version-2.0.0-blue" alt="version">
+  <img src="https://img.shields.io/badge/version-3.0.0-blue" alt="version">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL3.0-green" alt="license"></a>
   <h4>
     <a href="README.md">🇨🇳 中文</a>
@@ -26,9 +26,9 @@ A free PDF literature translation tool that makes reading English literature as 
 
 - Windows users:
 
-  Download the installer directly: https://github.com/zstar1003/FreePDF/releases/download/v2.0.0/FreePDF_v2.0.0_Setup.exe
+  Download the installer directly: 
 
-  Alternative link: https://pan.baidu.com/s/1KChVlJHMGML46YB4K8aMfg?pwd=8888 (Access code: 8888)
+  Alternative link: https://pan.baidu.com/s/1dmqg33WMgiFL62Ol7438zA?pwd=8888 (Access code: 8888)
 
 - Other system users:
 
