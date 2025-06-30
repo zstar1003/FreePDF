@@ -306,9 +306,9 @@ class DragDropOverlay(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        # 不设置为独立窗口，作为子控件使用
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
         
         # 设置样式
         self.setStyleSheet("""
@@ -370,11 +370,17 @@ class DragDropOverlay(QWidget):
     def show_overlay(self, parent_widget):
         """显示覆盖层"""
         if parent_widget:
-            # 设置大小和位置与父控件一致
+            # 设置父窗口（如果还没有设置的话）
+            if self.parent() != parent_widget:
+                self.setParent(parent_widget)
+            
+            # 设置覆盖层覆盖整个父窗口的客户区
             self.setGeometry(parent_widget.rect())
-            self.move(parent_widget.mapToGlobal(parent_widget.rect().topLeft()))
+            
+            # 确保覆盖层在所有子控件之上
+            self.raise_()
+            
         self.show()
-        self.raise_()
         
     def hide_overlay(self):
         """隐藏覆盖层"""
