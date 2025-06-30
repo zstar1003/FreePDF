@@ -26,7 +26,7 @@
 
 - windows 用户:
 
-  直接下载安装包：
+  直接下载安装包：https://github.com/zstar1003/FreePDF/releases/download/v3.0.0/FreePDF_v3.0.0_Setup.exe
 
   备用链接：https://pan.baidu.com/s/1dmqg33WMgiFL62Ol7438zA?pwd=8888  (提取码: 8888)
 
@@ -40,16 +40,20 @@
 
 支持四种可选翻译引擎，可通过`引擎配置`进行设置。
 
-- 必应翻译(默认)
+- 必应翻译(默认)  
+  
   选择翻译引擎为bing，无需额外参数
 
-- 谷歌翻译
+- 谷歌翻译  
+  
   选择翻译引擎为google，无需额外参数
 
-- 硅基翻译
+- 硅基翻译  
+  
   选择翻译引擎为silicon，需额外配置[硅基流动](https://cloud.siliconflow.cn/i/bjDoFhPf)API Key和具体聊天模型。
 
-- Ollama翻译
+- Ollama翻译  
+
   选择翻译引擎为ollama，先通过ollama部署本地chat模型，并配置ollama地址和具体聊天模型。
 
 支持五种语言互相翻译：中文、英文、日文、韩文、繁体中文。

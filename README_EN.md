@@ -26,7 +26,7 @@ A free PDF literature translation tool that makes reading English literature as 
 
 - Windows users:
 
-  Download the installer directly: 
+  Download the installer directly: https://github.com/zstar1003/FreePDF/releases/download/v3.0.0/FreePDF_v3.0.0_Setup.exe
 
   Alternative link: https://pan.baidu.com/s/1dmqg33WMgiFL62Ol7438zA?pwd=8888 (Access code: 8888)
 
