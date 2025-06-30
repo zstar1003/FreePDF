@@ -45,7 +45,6 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("FreePDF")
         self.setWindowIcon(QIcon("ui/logo/logo.ico"))
         self.setGeometry(100, 100, 1600, 900)
-        self.showMaximized()
         
         # 启用拖拽功能
         self.setAcceptDrops(True)
@@ -690,28 +689,37 @@ class MainWindow(QMainWindow):
     def _preheat_pdf_components(self):
         """预热PDF组件，确保WebEngine提前初始化"""
         try:
-            # 提前触发左右两个PDF组件的WebEngine初始化
-            # 这会启动预加载过程，让WebEngine提前准备好
+            # 延迟预热，避免影响初始窗口显示
+            def delayed_preheat():
+                try:
+                    # 提前触发左右两个PDF组件的WebEngine初始化
+                    # 这会启动预加载过程，让WebEngine提前准备好
+                    
+                    # 强制触发WebEngine的初始化，但不显示
+                    temp_geometry = self.left_pdf_widget.pdf_view.geometry()
+                    temp_geometry2 = self.right_pdf_widget.pdf_view.geometry()
+                    
+                    # 设置一个很小的大小来触发渲染管道初始化，但不影响用户界面
+                    self.left_pdf_widget.pdf_view.resize(1, 1)
+                    self.right_pdf_widget.pdf_view.resize(1, 1)
+                    
+                    # 延迟恢复正常大小
+                    def restore_size():
+                        self.left_pdf_widget.pdf_view.resize(temp_geometry.size())
+                        self.right_pdf_widget.pdf_view.resize(temp_geometry2.size())
+                    
+                    QTimer.singleShot(300, restore_size)
+                    
+                    print("PDF组件预热已启动，WebEngine初始化中...")
+                    
+                except Exception as e:
+                    print(f"PDF组件预热失败: {e}")
             
-            # 强制触发WebEngine的初始化，但不显示
-            temp_geometry = self.left_pdf_widget.pdf_view.geometry()
-            temp_geometry2 = self.right_pdf_widget.pdf_view.geometry()
-            
-            # 设置一个很小的大小来触发渲染管道初始化，但不影响用户界面
-            self.left_pdf_widget.pdf_view.resize(1, 1)
-            self.right_pdf_widget.pdf_view.resize(1, 1)
-            
-            # 延迟恢复正常大小
-            def restore_size():
-                self.left_pdf_widget.pdf_view.resize(temp_geometry.size())
-                self.right_pdf_widget.pdf_view.resize(temp_geometry2.size())
-            
-            QTimer.singleShot(500, restore_size)
-            
-            print("PDF组件预热已启动，WebEngine初始化中...")
+            # 延迟1秒后执行预热，确保窗口已经稳定显示
+            QTimer.singleShot(1000, delayed_preheat)
             
         except Exception as e:
-            print(f"PDF组件预热失败: {e}")
+            print(f"PDF组件预热启动失败: {e}")
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         """拖拽进入事件"""
