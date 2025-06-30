@@ -19,7 +19,7 @@ A free PDF literature translation tool that makes reading English literature as 
 
 ## 🏗️ Demo
 
-[![FreePDF: Make reading English literature as easy as drinking water](https://i0.hdslb.com/bfs/archive/43c920704c379c27424211f3edfc1657369dfd66.jpg@672w_378h_1c.avif)](https://www.bilibili.com/video/BV1hcKfzEE9e)
+[![FreePDF: Make reading English literature as easy as drinking water](https://i0.hdslb.com/bfs/archive/43c920704c379c27424211f3edfc1657369dfd66.jpg@672w_378h_1c.avif)](https://www.bilibili.com/video/BV11EgkziEFg)
 
 
 ## 📦 Usage
@@ -40,17 +40,21 @@ After translation, the PDF files will generate `-dual.pdf` (bilingual version) a
 
 Supports four optional translation engines, which can be configured through `Translation Settings`.
 
-- 1. Bing Translator (Default)
-     Select translation engine as bing, no additional parameters required
+- Bing Translator (Default)
 
-- 2. Google Translate
-     Select translation engine as google, no additional parameters required
+  Select translation engine as bing, no additional parameters required
 
-- 3. Silicon Flow Translator
-     Select translation engine as silicon, requires additional configuration of [Silicon Flow](https://cloud.siliconflow.cn/i/bjDoFhPf) API Key and specific chat model.
+- Google Translate
 
-- 4. Ollama Translator
-     Select translation engine as ollama, first deploy local chat model through ollama, and configure ollama address and specific chat model.
+  Select translation engine as google, no additional parameters required
+
+- Silicon Flow Translator
+
+  Select translation engine as silicon, requires additional configuration of [Silicon Flow](https://cloud.siliconflow.cn/i/bjDoFhPf) API Key and specific chat model.
+
+- Ollama Translator
+
+  Select translation engine as ollama, first deploy local chat model through ollama, and configure ollama address and specific chat model.
 
 Supports two translation modes: Chinese to English, English to Chinese, which can be set through `Source Language` and `Target Language`.
 

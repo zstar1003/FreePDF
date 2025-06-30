@@ -19,7 +19,7 @@
 
 ## 🏗️ 效果演示
 
-[![FreePDF：让看英文文献像喝水一样简单](https://i0.hdslb.com/bfs/archive/43c920704c379c27424211f3edfc1657369dfd66.jpg@672w_378h_1c.avif)](https://www.bilibili.com/video/BV1hcKfzEE9e)
+[![FreePDF：颠覆科研人的文献阅读方式](https://i0.hdslb.com/bfs/archive/43c920704c379c27424211f3edfc1657369dfd66.jpg@672w_378h_1c.avif)](https://www.bilibili.com/video/BV11EgkziEFg)
 
 
 ## 📦 使用方式
