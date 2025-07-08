@@ -182,32 +182,103 @@ class MainWindow(QMainWindow):
         
         # Left panel (Original PDF)
         left_frame = QFrame()
-        left_frame.setFrameStyle(QFrame.Shape.StyledPanel)
+        left_frame.setFrameStyle(QFrame.Shape.NoFrame)
+        left_frame.setStyleSheet("""
+            QFrame {
+                background-color: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+            }
+        """)
         left_layout = QVBoxLayout(left_frame)
+        left_layout.setContentsMargins(1, 1, 1, 1) # Add a small margin to prevent content from touching the border
+        left_layout.setSpacing(0)
         left_title = QLabel("原始文档")
-        left_title.setFixedHeight(35) # Restore height
-        left_title.setAlignment(Qt.AlignmentFlag.AlignCenter) # Restore alignment
+        left_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_title.setFixedHeight(35) # Restore fixed height
+        left_title.setStyleSheet("""
+            QLabel {
+                background-color: #ffffff;
+                color: #333333;
+                font-size: 14px;
+                font-weight: bold;
+                border-top-left-radius: 7px;
+                border-top-right-radius: 7px;
+                border-bottom: 1px solid #e0e0e0;
+            }
+        """)
         left_layout.addWidget(left_title)
         self.left_pdf_widget = PdfJsWidget(name="left_view", profile=self.web_profile)
+        self.left_pdf_widget.setStyleSheet("border: none; border-bottom-left-radius: 7px; border-bottom-right-radius: 7px;")
         left_layout.addWidget(self.left_pdf_widget)
         
         # Middle panel (Translated PDF)
         middle_frame = QFrame()
-        middle_frame.setFrameStyle(QFrame.Shape.StyledPanel)
+        middle_frame.setFrameStyle(QFrame.Shape.NoFrame)
+        middle_frame.setStyleSheet("""
+            QFrame {
+                background-color: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+            }
+        """)
         middle_layout = QVBoxLayout(middle_frame)
+        middle_layout.setContentsMargins(1, 1, 1, 1) # Add a small margin
+        middle_layout.setSpacing(0)
         middle_title = QLabel("翻译文档")
-        middle_title.setFixedHeight(35) # Restore height
-        middle_title.setAlignment(Qt.AlignmentFlag.AlignCenter) # Restore alignment
+        middle_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        middle_title.setFixedHeight(35) # Restore fixed height
+        middle_title.setStyleSheet("""
+            QLabel {
+                background-color: #ffffff;
+                color: #333333;
+                font-size: 14px;
+                font-weight: bold;
+                border-top-left-radius: 7px;
+                border-top-right-radius: 7px;
+                border-bottom: 1px solid #e0e0e0;
+            }
+        """)
         middle_layout.addWidget(middle_title)
         self.right_pdf_widget = PdfJsWidget(name="right_view", profile=self.web_profile)
+        self.right_pdf_widget.setStyleSheet("border: none; border-bottom-left-radius: 7px; border-bottom-right-radius: 7px;")
         middle_layout.addWidget(self.right_pdf_widget)
         
-        # Right panel (QA)
+        # Right panel (QA) - Restoring to a stable state with a visible title bar and content
         self.qa_panel = QFrame()
-        self.qa_panel.setFrameStyle(QFrame.Shape.StyledPanel)
+        self.qa_panel.setFrameStyle(QFrame.Shape.NoFrame)
+        self.qa_panel.setStyleSheet("""
+            QFrame {
+                background-color: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+            }
+        """)
         qa_panel_layout = QVBoxLayout(self.qa_panel)
+        qa_panel_layout.setContentsMargins(1, 1, 1, 1)
+        qa_panel_layout.setSpacing(0)
+        
+        # 1. Restore the external, styled title bar.
         qa_title = QLabel("智能问答")
+        qa_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        qa_title.setFixedHeight(35)
+        qa_title.setStyleSheet("""
+            QLabel {
+                background-color: #ffffff;
+                color: #333333;
+                font-size: 14px;
+                font-weight: bold;
+                border-top-left-radius: 7px;
+                border-top-right-radius: 7px;
+                border-bottom: 1px solid #e0e0e0;
+            }
+        """)
         qa_panel_layout.addWidget(qa_title)
+        
+        # 2. Restore the QA content widget below the title.
+        # 3. Hide the widget's internal title to prevent duplicates.
+        self.embedded_qa.hide_title_bar()
+        self.embedded_qa.setStyleSheet("border: none; border-bottom-left-radius: 7px; border-bottom-right-radius: 7px;")
         qa_panel_layout.addWidget(self.embedded_qa)
         
         self.main_splitter.addWidget(left_frame)

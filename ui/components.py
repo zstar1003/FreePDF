@@ -1260,19 +1260,7 @@ class EmbeddedQAWidget(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(8)
-        
-        # 标题区域
-        title_label = QLabel("📚 智能问答")
-        title_label.setStyleSheet("""
-            QLabel {
-                font-size: 16px;
-                font-weight: bold;
-                color: #333;
-                padding: 8px 0;
-                border-bottom: 2px solid #007acc;
-            }
-        """)
-        main_layout.addWidget(title_label)
+    
         
         # 对话显示区域
         from PyQt6.QtWidgets import QTextEdit
@@ -1405,9 +1393,14 @@ class EmbeddedQAWidget(QWidget):
         self.setVisible(False)
         
     def toggle_widget(self):
-        """切换显示/隐藏"""
+        """切换小部件的可见性"""
         self.setVisible(not self.isVisible())
-        
+
+    def hide_title_bar(self):
+        """隐藏标题栏"""
+        if hasattr(self, 'title_label'):
+            self.title_label.hide()
+
     def send_question(self):
         """发送问题"""
         question = self.question_input.toPlainText().strip()
