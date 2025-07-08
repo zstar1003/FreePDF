@@ -163,3 +163,24 @@ class PdfJsWidget(QWidget):
         self.view.page().runJavaScript("isZooming = true;")
         self.view.page().runJavaScript("zoomOut();")
         self.view.page().runJavaScript("setTimeout(() => { isZooming = false; }, 150);") 
+
+    def cleanup(self):
+        """Clean up resources to prevent memory leaks and shutdown warnings."""
+        if self.view:
+            page = self.view.page()
+            if page:
+                try:
+                    # Disconnect all signals from the page to break reference cycles.
+                    page.loadFinished.disconnect()
+                except TypeError:
+                    # This happens if it was already disconnected or never connected.
+                    pass
+                
+                # The page is parented to the view, which is parented to the widget.
+                # Qt's memory management should handle it, but we call deleteLater
+                # to be explicit and help break cycles.
+                page.deleteLater()
+
+            self.view.setPage(None)
+            self.view.deleteLater()
+            self.view = None 

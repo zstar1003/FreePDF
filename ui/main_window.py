@@ -668,27 +668,35 @@ class MainWindow(QMainWindow):
     @pyqtSlot(str)
     def on_translation_failed(self, error_message):
         """翻译失败"""
-        self.right_pdf_widget.view.setHtml(f"<div style='display:flex;justify-content:center;align-items:center;height:100%;font-size:16px;color:red;'>翻译失败: {error_message}</div>")
-        self.status_label.set_status(f"翻译失败: {error_message}", "error")
-            
+        self.hide_loading()
+        QMessageBox.critical(self, "翻译失败", f"翻译过程中出现错误:\n{error_message}")
+        
     # def on_text_selected(self, text): # REMOVED: Feature not available in new widget
     #     """文本选中"""
     #     if text.strip():
     #         self.status_label.set_status(f"已选择文本: {text[:50]}...", "info")
         
     def closeEvent(self, event):
-        """关闭事件"""
-        # 清理翻译管理器
-        self.translation_manager.cleanup()
-        
-        # The new widgets do not have a cleanup method.
-        # self.left_pdf_widget.cleanup() # REMOVED
-        # self.right_pdf_widget.cleanup() # REMOVED
-        
-        super().closeEvent(event)
+        """处理关闭事件"""
+        # Clean up web engine widgets before closing to prevent shutdown errors.
+        if hasattr(self, 'left_pdf_widget') and self.left_pdf_widget:
+            self.left_pdf_widget.cleanup()
+        if hasattr(self, 'right_pdf_widget') and self.right_pdf_widget:
+            self.right_pdf_widget.cleanup()
+
+        # Clean up translation manager threads
+        if hasattr(self, 'translation_manager') and self.translation_manager:
+            self.translation_manager.cleanup()
+            
+        reply = QMessageBox.question(self, '确认退出', '您确定要退出 FreePDF 吗？',
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                     QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            event.accept()
+        else:
+            event.ignore()
 
     def resizeEvent(self, event):
-        """窗口大小改变时重新调整loading widget位置"""
         super().resizeEvent(event)
         # 不再需要手动调整加载组件位置，因为它已集成在QStackedWidget中
 
