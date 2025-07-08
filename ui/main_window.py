@@ -56,10 +56,9 @@ class MainWindow(QMainWindow):
         self._scroll_sync_enabled = True
         self.qa_panel_visible = True
 
-        # Create a single, shared profile for all web views
-        self.web_profile = QWebEngineProfile("shared_profile", self)
-        self.web_profile.setCachePath(os.path.join("cache", "web_engine_cache"))
-        self.web_profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.AllowPersistentCookies)
+        # Use an off-the-record (incognito) profile by creating a QWebEngineProfile
+        # without a persistent storage name.
+        self.web_profile = QWebEngineProfile(self)
         
         self.drag_overlay = DragDropOverlay(self)
         self.qa_dialog = QADialog(self) # Keep for compatibility if needed
