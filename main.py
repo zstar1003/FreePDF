@@ -83,7 +83,6 @@ def _load_pdf2zh_modules():
         # 尝试先导入onnxruntime（使用hook确保兼容性）
         try:
             print("  - 预导入onnxruntime hook...")
-            import onnxruntime_hook
             print("  - onnxruntime hook 导入成功")
         except Exception as e:
             print(f"  - onnxruntime hook 导入失败: {e}")
@@ -222,10 +221,10 @@ def _load_pdf2zh_modules():
 _load_pdf2zh_modules()
 
 # 安全地导入PyQt6
-from PyQt6.QtWebEngineCore import QWebEngineProfile
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWebEngineCore import QWebEngineProfile  # noqa: E402
+from PyQt6.QtWidgets import QApplication  # noqa: E402
 
-from ui.main_window import MainWindow
+from ui.main_window import MainWindow  # noqa: E402
 
 
 def get_pdf2zh_modules():

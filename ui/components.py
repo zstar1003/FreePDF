@@ -378,7 +378,7 @@ class DragDropOverlay(QWidget):
             self.setGeometry(parent_widget.rect())
             
             # 确保覆盖层在所有子控件之上
-            self.raise_()
+        self.raise_()
             
         self.show()
         

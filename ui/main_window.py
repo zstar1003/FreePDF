@@ -10,7 +10,9 @@ __version__ = "3.0.0"
 
 from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon
+from PyQt6.QtWebEngineCore import QWebEngineProfile
 from PyQt6.QtWidgets import (
+    QApplication,
     QDialog,
     QFileDialog,
     QFrame,
@@ -34,7 +36,7 @@ from ui.components import (
     StatusLabel,
     TranslationConfigDialog,
 )
-from ui.pdf_widget import PDFWidget
+from ui.pdfjs_widget import PdfJsWidget  # Use the new widget
 
 
 class MainWindow(QMainWindow):
@@ -46,45 +48,39 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon("ui/logo/logo.ico"))
         self.setGeometry(100, 100, 1600, 900)
         
-        # 启用拖拽功能
         self.setAcceptDrops(True)
         
-        # 初始化组件
         self.current_file = None
         self.translation_manager = TranslationManager()
-        self._pending_zoom_value = None
-        self.qa_panel_visible = True  # 问答面板显示状态
-        self._scroll_sync_enabled = True  # 滚动同步状态
-        self._is_syncing = False  # 防止滚动同步循环
+        self._is_syncing = False
+        self._scroll_sync_enabled = True
+        self.qa_panel_visible = True
+
+        # Create a single, shared profile for all web views
+        self.web_profile = QWebEngineProfile("shared_profile", self)
+        self.web_profile.setCachePath(os.path.join("cache", "web_engine_cache"))
+        self.web_profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.AllowPersistentCookies)
         
-        # 创建拖拽提示覆盖层
         self.drag_overlay = DragDropOverlay(self)
-        
-        # 创建问答对话框（保留兼容性）
-        self.qa_dialog = QADialog(self)
-        
-        # 创建嵌入式问答组件
+        self.qa_dialog = QADialog(self) # Keep for compatibility if needed
         self.embedded_qa = EmbeddedQAWidget(self)
         
-        # 创建UI
         self.setup_ui()
         self.setup_status_bar()
         self.setup_connections()
-        
-        # 预热PDF组件，确保WebEngine提前初始化
-        self._preheat_pdf_components()
+
+        # Install the global event filter
+        QApplication.instance().installEventFilter(self)
         
     def setup_ui(self):
         """设置UI界面"""
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # 主布局
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(5, 5, 5, 5)
-        main_layout.setSpacing(5)  # 设置主布局元素间距为5px，保持紧凑
+        main_layout.setSpacing(5)
         
-        # 工具栏
         toolbar_layout = QHBoxLayout()
         toolbar_layout.setContentsMargins(0, 0, 0, 0)  # 减少外边距
         toolbar_layout.setSpacing(10)  # 控制元素间距
@@ -182,112 +178,45 @@ class MainWindow(QMainWindow):
         
         main_layout.addLayout(toolbar_layout)
         
-        # 主分割器 - 左中右三栏布局
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
         
-        # 左侧预览区（原始PDF）
+        # Left panel (Original PDF)
         left_frame = QFrame()
         left_frame.setFrameStyle(QFrame.Shape.StyledPanel)
         left_layout = QVBoxLayout(left_frame)
-        left_layout.setContentsMargins(2, 2, 2, 2)
-        
-        # 左侧标题
         left_title = QLabel("原始文档")
-        left_title.setFixedHeight(35)
-        left_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        left_title.setStyleSheet("""
-            QLabel {
-                background-color: #f8f9fa;
-                padding: 8px;
-                border-bottom: 1px solid #dee2e6;
-                font-weight: bold;
-                color: #495057;
-                font-size: 14px;
-            }
-        """)
+        left_title.setFixedHeight(35) # Restore height
+        left_title.setAlignment(Qt.AlignmentFlag.AlignCenter) # Restore alignment
         left_layout.addWidget(left_title)
-        
-        # 左侧PDF查看器
-        self.left_pdf_widget = PDFWidget()
+        self.left_pdf_widget = PdfJsWidget(name="left_view", profile=self.web_profile)
         left_layout.addWidget(self.left_pdf_widget)
         
-        # 中间区域：翻译文档
+        # Middle panel (Translated PDF)
         middle_frame = QFrame()
         middle_frame.setFrameStyle(QFrame.Shape.StyledPanel)
         middle_layout = QVBoxLayout(middle_frame)
-        middle_layout.setContentsMargins(2, 2, 2, 2)
-        
-        # 中间标题
         middle_title = QLabel("翻译文档")
-        middle_title.setFixedHeight(35)
-        middle_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        middle_title.setStyleSheet("""
-            QLabel {
-                background-color: #f8f9fa;
-                padding: 8px;
-                border-bottom: 1px solid #dee2e6;
-                font-weight: bold;
-                color: #495057;
-                font-size: 14px;
-            }
-        """)
+        middle_title.setFixedHeight(35) # Restore height
+        middle_title.setAlignment(Qt.AlignmentFlag.AlignCenter) # Restore alignment
         middle_layout.addWidget(middle_title)
-        
-        # 中间PDF查看器
-        self.right_pdf_widget = PDFWidget()
+        self.right_pdf_widget = PdfJsWidget(name="right_view", profile=self.web_profile)
         middle_layout.addWidget(self.right_pdf_widget)
         
-        # 右侧问答面板
-        qa_panel_frame = QFrame()
-        qa_panel_frame.setFrameStyle(QFrame.Shape.StyledPanel)
-        qa_panel_frame.setMaximumWidth(500)  # 设置最大宽度
-        qa_panel_frame.setMinimumWidth(250)  # 设置最小宽度
-        qa_panel_layout = QVBoxLayout(qa_panel_frame)
-        qa_panel_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # 问答面板标题
+        # Right panel (QA)
+        self.qa_panel = QFrame()
+        self.qa_panel.setFrameStyle(QFrame.Shape.StyledPanel)
+        qa_panel_layout = QVBoxLayout(self.qa_panel)
         qa_title = QLabel("智能问答")
-        qa_title.setFixedHeight(35)
-        qa_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        qa_title.setStyleSheet("""
-            QLabel {
-                background-color: #17a2b8;
-                color: white;
-                padding: 8px;
-                border-bottom: 1px solid #138496;
-                font-weight: bold;
-                font-size: 14px;
-            }
-        """)
         qa_panel_layout.addWidget(qa_title)
-        
-        # 嵌入问答组件
         qa_panel_layout.addWidget(self.embedded_qa)
         
-        # 初始化问答面板，显示欢迎信息
-        self.embedded_qa.add_message("系统", "欢迎使用智能问答功能！请先打开PDF文件，然后就可以开始对话了。")
-        
-        # 保存right_frame的引用，用于后续定位
-        self.right_frame = middle_frame
-        
-        # 添加到主分割器
         self.main_splitter.addWidget(left_frame)
         self.main_splitter.addWidget(middle_frame)
-        self.main_splitter.addWidget(qa_panel_frame)
-        
-        # 设置初始比例：左侧30%，中间45%，右侧25%（默认显示）
-        # 使用更大的初始值确保布局正确
+        self.main_splitter.addWidget(self.qa_panel)
         self.main_splitter.setSizes([300, 450, 250])
-        
-        # 设置最小尺寸
         self.main_splitter.setChildrenCollapsible(False)
         
-        # 保存问答面板引用
-        self.qa_panel = qa_panel_frame
-        
         main_layout.addWidget(self.main_splitter)
-        
-
         
     def setup_status_bar(self):
         """设置状态栏"""
@@ -312,14 +241,17 @@ class MainWindow(QMainWindow):
         self.sync_btn.clicked.connect(self.toggle_scroll_sync)
         
         # PDF查看器信号
-        self.left_pdf_widget.text_selected.connect(self.on_text_selected)
+        # self.left_pdf_widget.text_selected.connect(self.on_text_selected) # REMOVED: Feature not available in new widget
         
         # 翻译管理器信号
         self.translation_manager.current_thread = None
         
         # 连接PDF组件的滚动信号
-        self.left_pdf_widget.scroll_changed.connect(self.on_left_scroll_changed)
-        self.right_pdf_widget.scroll_changed.connect(self.on_right_scroll_changed)
+        # self.left_pdf_widget.scroll_changed.connect(self.on_left_scroll_changed) # This line was removed by the user's edit, so it's commented out.
+        # self.right_pdf_widget.scroll_changed.connect(self.on_right_scroll_changed) # This line was removed by the user's edit, so it's commented out.
+        # Connect the scroll signals from both new widgets
+        self.left_pdf_widget.scrollChanged.connect(self.on_scroll_changed)
+        self.right_pdf_widget.scrollChanged.connect(self.on_scroll_changed)
     
     def toggle_scroll_sync(self):
         """切换滚动同步状态"""
@@ -332,25 +264,22 @@ class MainWindow(QMainWindow):
         
         print(f"滚动同步已{'启用' if self._scroll_sync_enabled else '禁用'}")
     
-    def on_left_scroll_changed(self, position):
-        """处理左侧PDF滚动"""
+    def on_scroll_changed(self, view_name, top, left):
         if not self._scroll_sync_enabled or self._is_syncing:
             return
         
-        print(f"左侧滚动位置变化: {position}")
         self._is_syncing = True
-        self.right_pdf_widget.set_scroll_position(position)
-        QTimer.singleShot(200, self._reset_sync_flag)
-    
-    def on_right_scroll_changed(self, position):
-        """处理右侧PDF滚动"""
-        if not self._scroll_sync_enabled or self._is_syncing:
-            return
+        target_widget = None
+        if view_name == "left_view":
+            target_widget = self.right_pdf_widget
+        elif view_name == "right_view":
+            target_widget = self.left_pdf_widget
         
-        print(f"右侧滚动位置变化: {position}")
-        self._is_syncing = True
-        self.left_pdf_widget.set_scroll_position(position)
-        QTimer.singleShot(200, self._reset_sync_flag)
+        if target_widget:
+            target_widget.set_scroll_position(top, left)
+        
+        # Use a short timer to reset the sync flag, preventing immediate re-triggering.
+        QTimer.singleShot(50, lambda: setattr(self, '_is_syncing', False))
     
     def _reset_sync_flag(self):
         """重置同步标志"""
@@ -519,45 +448,14 @@ class MainWindow(QMainWindow):
 
     def load_pdf_file(self, file_path):
         """加载PDF文件"""
-        try:
-            # 加载到左侧预览器
-            if self.left_pdf_widget.load_pdf(file_path):
-                self.current_file = file_path
-                
-                # 确保左侧PDF视图显示
-                self.left_pdf_widget.show()
-                self.left_pdf_widget.pdf_view.show()
-                
-                # 强制更新左侧区域
-                self.left_pdf_widget.update()
-                self.left_pdf_widget.repaint()
-                
-                # 激活左侧PDF视图
-                self.left_pdf_widget.pdf_view.setFocus()
-                
-                # 更新状态
-                filename = os.path.basename(file_path)
-                self.status_label.set_status(f"已加载: {filename}", "success")
-                
-                # 如果问答面板正在显示，更新其状态
-                if self.qa_panel.width() > 10:
-                    self._update_qa_panel_status()
-                
-                # 显示加载动画（不需要隐藏占位符，会被QStackedWidget自动管理）
-                self.show_loading_centered("正在准备翻译...")
-                
-                # 开始翻译
-                self.start_translation(file_path)
-                
-                # 延迟100ms后再次强制刷新显示
-                QTimer.singleShot(100, lambda: self._force_left_pdf_display())
-                
-            else:
-                QMessageBox.warning(self, "错误", "无法打开PDF文件")
-                
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"加载文件时出错: {str(e)}")
-            
+        self.current_file = file_path
+        self.left_pdf_widget.load_pdf(file_path)
+        self.status_label.set_status(f"已加载: {os.path.basename(file_path)}", "success")
+        
+        # Show a loading message in the right panel and start the actual translation
+        self.right_pdf_widget.view.setHtml("<div style='display:flex;justify-content:center;align-items:center;height:100%;font-size:16px;color:grey;'>正在准备翻译...</div>")
+        self.start_translation(file_path)
+
     def _force_left_pdf_display(self):
         """强制显示左侧PDF视图"""
         try:
@@ -615,63 +513,17 @@ class MainWindow(QMainWindow):
     @pyqtSlot(str)
     def on_translation_progress(self, message):
         """翻译进度更新"""
-        try:
-            self.right_pdf_widget.set_loading_message(message)
-            self.status_label.set_status(message, "info")
-        except Exception as e:
-            print(f"更新翻译进度时出错: {e}")
+        self.right_pdf_widget.view.setHtml(f"<div style='display:flex;justify-content:center;align-items:center;height:100%;font-size:16px;color:grey;'>{message}</div>")
+        self.status_label.set_status(message, "info")
         
     @pyqtSlot(str)
     def on_translation_completed(self, translated_file):
         """翻译完成"""
-        try:
-            # 检查翻译文件是否存在
-            if not os.path.exists(translated_file):
-                self.on_translation_failed("翻译文件不存在")
-                return
-            
-            # 额外验证PDF文件
-            if not self._validate_pdf_file(translated_file):
-                self.on_translation_failed("翻译后的PDF文件格式无效或损坏")
-                return
-            
-            # 记录翻译文件
-            self.translation_manager.set_translated_file(self.current_file, translated_file)
-            
-            # 先隐藏加载动画，然后加载翻译后的文件到右侧
-            self.hide_loading()
-            
-            # 重试机制加载PDF
-            retry_count = 3
-            loaded = False
-            
-            for i in range(retry_count):
-                if self.right_pdf_widget.load_pdf(translated_file):
-                    loaded = True
-                    break
-                else:
-                    if i < retry_count - 1:  # 不是最后一次尝试
-                        print(f"加载PDF失败，正在重试... ({i+1}/{retry_count})")
-                        # 短暂等待后重试
-                        import time
-                        time.sleep(0.5)
-            
-            if loaded:
-                # 确保PDF视图显示
-                self.right_pdf_widget.pdf_view.show()
-                
-                # 强制刷新显示
-                QTimer.singleShot(100, self._force_pdf_display)
-                
-                filename = os.path.basename(translated_file)
-                file_size = os.path.getsize(translated_file) / (1024 * 1024)  # MB
-                self.status_label.set_status(f"翻译完成: {filename} ({file_size:.1f}MB)", "success")
-                print(f"翻译成功，文件保存在: {translated_file}")
-            else:
-                self.on_translation_failed("多次尝试后仍无法加载翻译后的文件")
-                
-        except Exception as e:
-            self.on_translation_failed(f"加载翻译文件时出错: {str(e)}")
+        if os.path.exists(translated_file):
+            self.right_pdf_widget.load_pdf(translated_file)
+            self.status_label.set_status("翻译完成", "success")
+        else:
+            self.on_translation_failed(f"翻译文件 '{translated_file}' 不存在")
             
     def _validate_pdf_file(self, file_path):
         """验证PDF文件是否有效"""
@@ -745,42 +597,22 @@ class MainWindow(QMainWindow):
     @pyqtSlot(str)
     def on_translation_failed(self, error_message):
         """翻译失败"""
-        try:
-            # 隐藏加载动画
-            self.hide_loading()
+        self.right_pdf_widget.view.setHtml(f"<div style='display:flex;justify-content:center;align-items:center;height:100%;font-size:16px;color:red;'>翻译失败: {error_message}</div>")
+        self.status_label.set_status(f"翻译失败: {error_message}", "error")
             
-            # 使用新的重置方法，平滑切换回占位符
-            self.right_pdf_widget.reset_to_placeholder()
-            
-            # 显示错误状态
-            self.status_label.set_status(f"翻译失败: {error_message}", "error")
-            
-            # 显示错误对话框（非阻塞）
-            error_dialog = QMessageBox(self)
-            error_dialog.setWindowTitle("翻译失败")
-            error_dialog.setText("PDF翻译过程中出现错误")
-            error_dialog.setDetailedText(error_message)
-            error_dialog.setIcon(QMessageBox.Icon.Warning)
-            error_dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
-            error_dialog.show()
-            
-        except Exception as e:
-            print(f"处理翻译失败时出错: {e}")
-            
-    @pyqtSlot(str)
-    def on_text_selected(self, text):
-        """文本选中"""
-        if text.strip():
-            self.status_label.set_status(f"已选择文本: {text[:50]}...", "info")
+    # def on_text_selected(self, text): # REMOVED: Feature not available in new widget
+    #     """文本选中"""
+    #     if text.strip():
+    #         self.status_label.set_status(f"已选择文本: {text[:50]}...", "info")
         
     def closeEvent(self, event):
         """关闭事件"""
         # 清理翻译管理器
         self.translation_manager.cleanup()
         
-        # 清理PDF查看器
-        self.left_pdf_widget.cleanup()
-        self.right_pdf_widget.cleanup()
+        # The new widgets do not have a cleanup method.
+        # self.left_pdf_widget.cleanup() # REMOVED
+        # self.right_pdf_widget.cleanup() # REMOVED
         
         super().closeEvent(event)
 

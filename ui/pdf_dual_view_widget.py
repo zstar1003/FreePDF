@@ -1,11 +1,10 @@
 import os
-import sys
 
 from PyQt6.QtCore import QEvent, QObject, Qt, QUrl, pyqtSignal, pyqtSlot
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWidgets import QApplication, QHBoxLayout, QMainWindow, QWidget
+from PyQt6.QtWidgets import QApplication, QHBoxLayout, QWidget
 
 # JavaScript for synchronization
 SYNC_JS = """
@@ -89,30 +88,28 @@ class Bridge(QObject):
 class WebEnginePage(QWebEnginePage):
     """Custom WebEnginePage to handle and print console messages for debugging."""
     def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
-        print(f"JS Console ({sourceID}:{lineNumber}): {message}")
+        # Optionally, you can filter which messages to show, e.g., only show errors.
+        if level in [QWebEnginePage.JavaScriptConsoleMessageLevel.WarningMessageLevel, QWebEnginePage.JavaScriptConsoleMessageLevel.ErrorMessageLevel]:
+             print(f"JS Console ({level}, {sourceID}:{lineNumber}): {message}")
 
-class MainWindow(QMainWindow):
-    def __init__(self, pdf_path):
-        super().__init__()
-        self.setWindowTitle("PDF.js Dual Viewer with Synced Scrolling")
-        self.setGeometry(100, 100, 1800, 900)
-
-        # Convert local file paths to URLs for the viewer
-        self.pdf_url = QUrl.fromLocalFile(pdf_path).toString()
-        viewer_path = os.path.abspath('pdfjs/web/viewer.html')
-        self.viewer_url = QUrl.fromLocalFile(viewer_path)
-
+class PdfDualViewWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
         # A shared profile for both views can improve resource usage
-        self.profile = QWebEngineProfile("synced_profile", self)
+        # We make it persistent to enable caching
+        self.profile = QWebEngineProfile("pdf_viewer_profile", self)
+        self.profile.setCachePath(os.path.join("cache", "web_engine_cache"))
+        self.profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.AllowPersistentCookies)
 
         # The JS bridge for Python-JS communication
         self.bridge = Bridge(self)
         self.bridge.scrollChanged.connect(self.sync_scroll)
 
         # Main layout
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        layout = QHBoxLayout(central_widget)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(layout)
 
         # Create two web views
         self.view1 = self.create_web_view('view1')
@@ -121,19 +118,25 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.view1)
         layout.addWidget(self.view2)
 
-        # Install a global event filter. This is a more powerful way to catch
-        # events than subclassing, especially for complex widgets like QWebEngineView.
+        # Install a global event filter.
         QApplication.instance().installEventFilter(self)
 
-        # Load the PDF viewer into both views
-        full_url = QUrl(f"{self.viewer_url.toString()}?file={self.pdf_url}")
+    def load_pdf(self, pdf_path):
+        """Loads a PDF file into both views."""
+        viewer_path = os.path.abspath('pdfjs/web/viewer.html')
+        viewer_url = QUrl.fromLocalFile(viewer_path)
+        
+        # QWebEngineView requires a file URL in a specific format
+        pdf_url = QUrl.fromLocalFile(os.path.abspath(pdf_path)).toString()
+        
+        full_url = QUrl(f"{viewer_url.toString()}?file={pdf_url}")
+        
         self.view1.load(full_url)
         self.view2.load(full_url)
 
     def create_web_view(self, name):
         """Creates and configures a QWebEngineView instance."""
         view = QWebEngineView()
-        # Set an object name so we can identify the view in the event filter.
         view.setObjectName(name)
         page = WebEnginePage(self.profile, view)
         view.setPage(page)
@@ -150,8 +153,6 @@ class MainWindow(QMainWindow):
     def on_load_finished(self, ok, view, name):
         """Called after a web view has finished loading its content."""
         if ok:
-            print(f"View '{name}' finished loading.")
-
             # This script does three things:
             # 1. Defines our synchronization functions (from SYNC_JS).
             # 2. Dynamically loads the required 'qwebchannel.js' library.
@@ -166,7 +167,6 @@ class MainWindow(QMainWindow):
                 
                 // Part 3: Set the onload callback to run our setup after the script loads
                 script.onload = function() {{
-                    console.log("qwebchannel.js loaded for {name}. Setting up sync.");
                     setupSync('{name}');
                 }};
                 script.onerror = function() {{
@@ -226,28 +226,4 @@ class MainWindow(QMainWindow):
         if source_name == 'view1':
             self.view2.page().runJavaScript(js_code)
         else: # source_name == 'view2'
-            self.view1.page().runJavaScript(js_code)
-
-
-def main():
-    # We need a PDF file to display. Using 'test.pdf' from the project root.
-    pdf_file = os.path.abspath('test.pdf')
-    if not os.path.exists(pdf_file):
-        print(f"Error: PDF file not found at {pdf_file}")
-        print("Please ensure 'test.pdf' exists in the project root directory.")
-        sys.exit(1)
-
-    # This environment variable can help with some security restrictions
-    # when loading local files, though it may not always be necessary
-    # depending on the Qt version and OS.
-    os.environ['QTWEBENGINE_DISABLE_WEB_SECURITY'] = '1'
-    
-    app = QApplication(sys.argv)
-
-    main_win = MainWindow(pdf_file)
-    main_win.show()
-    sys.exit(app.exec())
-
-
-if __name__ == '__main__':
-    main() 
+            self.view1.page().runJavaScript(js_code) 
