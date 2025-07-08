@@ -54,6 +54,8 @@ class MainWindow(QMainWindow):
         self.translation_manager = TranslationManager()
         self._pending_zoom_value = None
         self.qa_panel_visible = True  # 问答面板显示状态
+        self._scroll_sync_enabled = True  # 滚动同步状态
+        self._is_syncing = False  # 防止滚动同步循环
         
         # 创建拖拽提示覆盖层
         self.drag_overlay = DragDropOverlay(self)
@@ -121,6 +123,23 @@ class MainWindow(QMainWindow):
         """)
         toolbar_layout.addWidget(self.config_btn)
         
+        # 滚动同步按钮
+        self.sync_btn = QPushButton("关闭滚动同步")
+        self.sync_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #17a2b8;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #138496;
+            }
+        """)
+        toolbar_layout.addWidget(self.sync_btn)
+        
         toolbar_layout.addStretch()
         
         # 关于软件按钮
@@ -159,7 +178,6 @@ class MainWindow(QMainWindow):
                 color: #666666;
             }
         """)
-        # 开局不需要置灰，直接可用
         toolbar_layout.addWidget(self.qa_btn)
         
         main_layout.addLayout(toolbar_layout)
@@ -290,14 +308,56 @@ class MainWindow(QMainWindow):
         self.about_btn.clicked.connect(self.show_about_dialog)
         self.qa_btn.clicked.connect(self.toggle_qa_widget)
         
+        # 滚动同步相关的连接
+        self.sync_btn.clicked.connect(self.toggle_scroll_sync)
+        
         # PDF查看器信号
         self.left_pdf_widget.text_selected.connect(self.on_text_selected)
         
         # 翻译管理器信号
         self.translation_manager.current_thread = None
         
-
-
+        # 连接PDF组件的滚动信号
+        self.left_pdf_widget.scroll_changed.connect(self.on_left_scroll_changed)
+        self.right_pdf_widget.scroll_changed.connect(self.on_right_scroll_changed)
+    
+    def toggle_scroll_sync(self):
+        """切换滚动同步状态"""
+        self._scroll_sync_enabled = not self._scroll_sync_enabled
+        self.sync_btn.setText("关闭滚动同步" if self._scroll_sync_enabled else "开启滚动同步")
+        
+        # 更新PDF组件的滚动同步状态
+        self.left_pdf_widget.enable_scroll_sync(self._scroll_sync_enabled)
+        self.right_pdf_widget.enable_scroll_sync(self._scroll_sync_enabled)
+        
+        print(f"滚动同步已{'启用' if self._scroll_sync_enabled else '禁用'}")
+    
+    def on_left_scroll_changed(self, position):
+        """处理左侧PDF滚动"""
+        if not self._scroll_sync_enabled or self._is_syncing:
+            return
+        
+        print(f"左侧滚动位置变化: {position}")
+        self._is_syncing = True
+        self.right_pdf_widget.set_scroll_position(position)
+        QTimer.singleShot(200, self._reset_sync_flag)
+    
+    def on_right_scroll_changed(self, position):
+        """处理右侧PDF滚动"""
+        if not self._scroll_sync_enabled or self._is_syncing:
+            return
+        
+        print(f"右侧滚动位置变化: {position}")
+        self._is_syncing = True
+        self.left_pdf_widget.set_scroll_position(position)
+        QTimer.singleShot(200, self._reset_sync_flag)
+    
+    def _reset_sync_flag(self):
+        """重置同步标志"""
+        if self._is_syncing:
+            print("重置同步标志")
+            self._is_syncing = False
+    
     @pyqtSlot()
     def open_file(self):
         """打开PDF文件"""
@@ -464,6 +524,17 @@ class MainWindow(QMainWindow):
             if self.left_pdf_widget.load_pdf(file_path):
                 self.current_file = file_path
                 
+                # 确保左侧PDF视图显示
+                self.left_pdf_widget.show()
+                self.left_pdf_widget.pdf_view.show()
+                
+                # 强制更新左侧区域
+                self.left_pdf_widget.update()
+                self.left_pdf_widget.repaint()
+                
+                # 激活左侧PDF视图
+                self.left_pdf_widget.pdf_view.setFocus()
+                
                 # 更新状态
                 filename = os.path.basename(file_path)
                 self.status_label.set_status(f"已加载: {filename}", "success")
@@ -478,11 +549,43 @@ class MainWindow(QMainWindow):
                 # 开始翻译
                 self.start_translation(file_path)
                 
+                # 延迟100ms后再次强制刷新显示
+                QTimer.singleShot(100, lambda: self._force_left_pdf_display())
+                
             else:
                 QMessageBox.warning(self, "错误", "无法打开PDF文件")
                 
         except Exception as e:
             QMessageBox.critical(self, "错误", f"加载文件时出错: {str(e)}")
+            
+    def _force_left_pdf_display(self):
+        """强制显示左侧PDF视图"""
+        try:
+            # 确保左侧PDF容器可见
+            self.left_pdf_widget.show()
+            
+            # 确保QStackedWidget显示PDF视图（索引2）
+            if hasattr(self.left_pdf_widget, 'stacked_widget'):
+                self.left_pdf_widget.stacked_widget.setCurrentIndex(2)
+                print("已切换到左侧PDF视图页面")
+            
+            # 显示PDF视图
+            self.left_pdf_widget.pdf_view.show()
+            
+            # 强制更新整个左侧区域
+            self.left_pdf_widget.update()
+            self.left_pdf_widget.repaint()
+            
+            # 激活PDF视图
+            self.left_pdf_widget.pdf_view.setFocus()
+            
+            # 触发整个窗口重绘
+            self.update()
+            self.repaint()
+            
+            print("左侧PDF显示已强制刷新")
+        except Exception as e:
+            print(f"强制显示左侧PDF时出错: {e}")
 
     def show_loading_centered(self, message):
         """显示居中的加载动画"""
