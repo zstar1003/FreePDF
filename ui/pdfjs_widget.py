@@ -52,8 +52,7 @@ function setupPdfJsWidget(viewName) {
             // Listen for user-initiated scrolls and notify Python.
             container.addEventListener('scroll', () => {
                 if (isSyncingScroll || isZooming) {
-                    isSyncingScroll = false;
-                    return;
+                    return; // Ignore scroll events during programmatic sync or zoom.
                 }
                 // Notify Python via the bridge.
                 window.bridge.onScroll(viewName, container.scrollTop, container.scrollLeft);

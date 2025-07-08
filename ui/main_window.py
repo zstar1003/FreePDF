@@ -689,6 +689,37 @@ class MainWindow(QMainWindow):
         else:
             event.ignore()
 
+    def eventFilter(self, obj, event):
+        """A global event filter to capture Ctrl+Wheel for zooming."""
+        if event.type() == event.Type.Wheel:
+            # The object can be a QWindow, which is not a QWidget.
+            # We must ensure it's a widget before using isAncestorOf.
+            if not isinstance(obj, QWidget):
+                return super().eventFilter(obj, event)
+
+            # Check if the event is for one of the PDF widgets.
+            # We need to check isAncestorOf because the event's source `obj`
+            # might be a child widget within the QWebEngineView.
+            source_widget = None
+            if self.left_pdf_widget.isAncestorOf(obj) or obj is self.left_pdf_widget:
+                source_widget = self.left_pdf_widget
+            elif self.right_pdf_widget.isAncestorOf(obj) or obj is self.right_pdf_widget:
+                source_widget = self.right_pdf_widget
+
+            if source_widget and (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+                # Ctrl key is pressed, so this is a zoom event.
+                if event.angleDelta().y() > 0:
+                    source_widget.zoom_in()
+                else:
+                    source_widget.zoom_out()
+                
+                # Return True to consume the event, preventing it from being
+                # processed as a scroll event.
+                return True
+
+        # For all other events, pass them through.
+        return super().eventFilter(obj, event)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         # 不再需要手动调整加载组件位置，因为它已集成在QStackedWidget中
