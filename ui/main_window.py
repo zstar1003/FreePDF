@@ -283,7 +283,8 @@ class MainWindow(QMainWindow):
         self.main_splitter.addWidget(left_frame)
         self.main_splitter.addWidget(middle_frame)
         self.main_splitter.addWidget(self.qa_panel)
-        self.main_splitter.setSizes([300, 450, 250])
+        # Set initial sizes to be equal for the first two panels
+        self.main_splitter.setSizes([375, 375, 250])
         self.main_splitter.setChildrenCollapsible(False)
         
         main_layout.addWidget(self.main_splitter)
@@ -322,7 +323,40 @@ class MainWindow(QMainWindow):
         # Connect the scroll signals from both new widgets
         self.left_pdf_widget.scrollChanged.connect(self.on_scroll_changed)
         self.right_pdf_widget.scrollChanged.connect(self.on_scroll_changed)
+        
+        # Handle download requests from the web engine
+        self.web_profile.downloadRequested.connect(self.on_download_requested)
     
+    def on_download_requested(self, download):
+        """Handle file download requests from the web view."""
+        # Get the original file name, if available
+        original_filename = "downloaded_file.pdf"
+        if self.current_file:
+            base, _ = os.path.splitext(os.path.basename(self.current_file))
+            # Suggest a name for the saved file (e.g., original_saved.pdf)
+            original_filename = f"{base}_saved.pdf"
+
+        # Open a "Save As" dialog
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save File",
+            original_filename,
+            "PDF Documents (*.pdf)"
+        )
+
+        if path:
+            download.setPath(path)
+            download.accept()
+            download.finished.connect(self.on_download_finished)
+            self.status_label.set_status(f"正在保存文件到: {os.path.basename(path)}...", "info")
+        else:
+            # User cancelled the dialog
+            download.cancel()
+
+    def on_download_finished(self):
+        """Called when a download is complete."""
+        self.status_label.set_status("文件保存成功", "success")
+
     def toggle_scroll_sync(self):
         """切换滚动同步状态"""
         self._scroll_sync_enabled = not self._scroll_sync_enabled
@@ -387,17 +421,9 @@ class MainWindow(QMainWindow):
             # 直接隐藏面板
             self.qa_panel.setVisible(False)
             
-            # 调整二栏分割器：左侧40%，中间60%
-            total_width = self.main_splitter.width()
-            if total_width > 100:
-                sizes = [int(total_width * 0.4), int(total_width * 0.6)]
-            else:
-                sizes = [400, 600]
-            
-            # 只设置前两栏的大小
-            current_sizes = self.main_splitter.sizes()
-            new_sizes = [sizes[0], sizes[1], current_sizes[2]]  # 保持第三栏原样
-            self.main_splitter.setSizes(new_sizes)
+            # The sizes are treated as proportions. Set the first two to equal
+            # proportions (50/50 split) and the hidden one to zero.
+            self.main_splitter.setSizes([1, 1, 0])
             
             print("隐藏面板 - 设置可见性: False")
         else:
@@ -411,7 +437,7 @@ class MainWindow(QMainWindow):
             # 检查当前状态并更新提示信息
             self._update_qa_panel_status()
             
-            # 调整三栏分割器：左侧37.5%，中间37.5%，右侧25%（左边两个容器宽度一致）
+            # 调整三栏分割器：左右两个视图等宽
             total_width = self.main_splitter.width()
             if total_width > 100:
                 sizes = [int(total_width * 0.375), int(total_width * 0.375), int(total_width * 0.25)]

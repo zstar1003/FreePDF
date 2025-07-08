@@ -129,7 +129,25 @@ class PdfJsWidget(QWidget):
     def on_load_finished(self, ok):
         """Injects JS after the page has loaded."""
         if ok:
+            # Inject CSS to hide unwanted toolbar buttons
+            css_to_hide_buttons = """
+                var style = document.createElement('style');
+                style.innerHTML = `
+                    /* Hide Open File, Print, and Add Image buttons */
+                    #openFile,
+                    #secondaryOpenFile,
+                    #print,
+                    #secondaryPrint,
+                    #editorStamp, /* Main stamp button on the toolbar */
+                    #editorStampAddImage {
+                        display: none !important;
+                    }
+                `;
+                document.head.appendChild(style);
+            """
+
             loader_script = f"""
+                {css_to_hide_buttons}
                 {PDFJS_WIDGET_JS}
                 var script = document.createElement('script');
                 script.src = 'qrc:///qtwebchannel/qwebchannel.js';
