@@ -328,12 +328,7 @@ class MainWindow(QMainWindow):
         """切换滚动同步状态"""
         self._scroll_sync_enabled = not self._scroll_sync_enabled
         self.sync_btn.setText("关闭滚动同步" if self._scroll_sync_enabled else "开启滚动同步")
-        
-        # 更新PDF组件的滚动同步状态
-        self.left_pdf_widget.enable_scroll_sync(self._scroll_sync_enabled)
-        self.right_pdf_widget.enable_scroll_sync(self._scroll_sync_enabled)
-        
-        print(f"滚动同步已{'启用' if self._scroll_sync_enabled else '禁用'}")
+        self.status_label.set_status(f"滚动同步已{'启用' if self._scroll_sync_enabled else '禁用'}", "info")
     
     def on_scroll_changed(self, view_name, top, left):
         if not self._scroll_sync_enabled or self._is_syncing:
