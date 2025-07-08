@@ -100,6 +100,7 @@ class PdfJsWidget(QWidget):
 
         # Create and configure the web view
         self.view = QWebEngineView()
+        self.view.setAcceptDrops(False)  # Disable drop events on the view
         page = WebEnginePage(self.profile, self.view)
         self.view.setPage(page)
         self.setLayout(QHBoxLayout())

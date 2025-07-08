@@ -673,20 +673,19 @@ class MainWindow(QMainWindow):
         
     def closeEvent(self, event):
         """处理关闭事件"""
-        # Clean up web engine widgets before closing to prevent shutdown errors.
-        if hasattr(self, 'left_pdf_widget') and self.left_pdf_widget:
-            self.left_pdf_widget.cleanup()
-        if hasattr(self, 'right_pdf_widget') and self.right_pdf_widget:
-            self.right_pdf_widget.cleanup()
-
-        # Clean up translation manager threads
-        if hasattr(self, 'translation_manager') and self.translation_manager:
-            self.translation_manager.cleanup()
-            
         reply = QMessageBox.question(self, '确认退出', '您确定要退出 FreePDF 吗？',
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                                      QMessageBox.StandardButton.No)
+        
         if reply == QMessageBox.StandardButton.Yes:
+            # Clean up resources only when the user confirms exiting.
+            if hasattr(self, 'left_pdf_widget') and self.left_pdf_widget:
+                self.left_pdf_widget.cleanup()
+            if hasattr(self, 'right_pdf_widget') and self.right_pdf_widget:
+                self.right_pdf_widget.cleanup()
+            if hasattr(self, 'translation_manager') and self.translation_manager:
+                self.translation_manager.cleanup()
+                
             event.accept()
         else:
             event.ignore()
