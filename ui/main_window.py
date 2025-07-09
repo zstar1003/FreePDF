@@ -6,11 +6,11 @@ import webbrowser
 import requests
 
 # 应用版本信息
-__version__ = "3.0.0"
+__version__ = "4.0.0"
 
 from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon
-from PyQt6.QtWebEngineCore import QWebEngineProfile
+from PyQt6.QtWebEngineCore import QWebEngineDownloadRequest, QWebEngineProfile
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
@@ -344,18 +344,45 @@ class MainWindow(QMainWindow):
             "PDF Documents (*.pdf)"
         )
 
-        if path:
-            download.setPath(path)
-            download.accept()
-            download.finished.connect(self.on_download_finished)
-            self.status_label.set_status(f"正在保存文件到: {os.path.basename(path)}...", "info")
-        else:
-            # User cancelled the dialog
+        # If the user cancels the dialog, path will be empty.
+        if not path:
             download.cancel()
+            return
+        
+        # Set the download path and accept the request.
+        download.setDownloadFileName(path)
+        download.accept()
+        print(f"开始下载到: {path}")
 
-    def on_download_finished(self):
-        """Called when a download is complete."""
-        self.status_label.set_status("文件保存成功", "success")
+        # Connect the isFinishedChanged signal to the completion handler.
+        # This signal is emitted when the download state changes, including completion.
+        download.isFinishedChanged.connect(lambda: self.on_download_finished(download))
+
+    def on_download_finished(self, download):
+        """Handles the completion of a download request."""
+        # This handler might be called multiple times, ensure we only act once it's truly finished.
+        if not download.isFinished():
+            return
+
+        # It's good practice to disconnect the signal to avoid multiple calls,
+        # especially if the download object persists.
+        try:
+            download.isFinishedChanged.disconnect()
+        except TypeError:
+            # Signal may have already been disconnected.
+            pass
+
+        path = download.downloadFileName()
+        state = download.state()
+
+        if state == QWebEngineDownloadRequest.DownloadState.DownloadCompleted:
+            QMessageBox.information(self, "下载完成", f"文件已成功保存到:\n{path}")
+            print(f"下载完成: {path}")
+        elif state == QWebEngineDownloadRequest.DownloadState.DownloadCancelled:
+            print(f"下载已取消: {path}")
+        else:
+            QMessageBox.warning(self, "下载失败", f"无法下载文件。\n状态: {state}")
+            print(f"下载失败: {path}, 状态: {state}")
 
     def toggle_scroll_sync(self):
         """切换滚动同步状态"""
