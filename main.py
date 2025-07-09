@@ -4,6 +4,12 @@ import multiprocessing
 import os
 import sys
 
+# 追加禁用同源策略和允许 file:// 读取本地资源的标志，确保 PDF.js 能加载 locale/*.ftl
+flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+extra = " --disable-web-security --allow-file-access-from-files --allow-file-access --lang=zh-CN"
+if extra.strip() not in flags:
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (flags + extra).strip()
+
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 

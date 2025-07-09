@@ -1,10 +1,10 @@
 import os
 
-from PyQt6.QtCore import QEvent, QObject, Qt, QUrl, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, Qt, QUrl, pyqtSignal, pyqtSlot
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWidgets import QApplication, QWidget, QHBoxLayout
+from PyQt6.QtWidgets import QHBoxLayout, QWidget
 
 # This JS code will be injected into each viewer instance.
 # It sets up the communication bridge and defines functions that Python can call.
@@ -82,13 +82,17 @@ class WebEnginePage(QWebEnginePage):
              print(f"JS Console ({sourceID}:{lineNumber}): {message}")
 
 class PdfJsWidget(QWidget):
+    """PDF.js Viewer 封装控件，可指定界面语言。"""
+
     # Expose the scrollChanged signal from the bridge
     scrollChanged = pyqtSignal(str, int, int)
-    
-    def __init__(self, name: str, profile: QWebEngineProfile, parent=None):
+
+    def __init__(self, name: str, profile: QWebEngineProfile, locale: str = "zh-cn", parent=None):
         super().__init__(parent)
         self.setObjectName(name)
         self._name = name
+        # 保存语言代码，可在运行时修改
+        self._locale = locale.lower() if locale else None
 
         # Use the shared profile passed from the main window
         self.profile = profile
@@ -123,6 +127,10 @@ class PdfJsWidget(QWidget):
         # When the page finishes loading, inject our script
         page.loadFinished.connect(self.on_load_finished)
 
+    def set_locale(self, locale: str | None):
+        """设置界面语言（例如 'en-us', 'zh-cn', 'zh-tw' 等）。设置为 None 则使用浏览器默认。"""
+        self._locale = locale.lower() if locale else None
+
     def load_pdf(self, pdf_path):
         """Loads a PDF file into the view."""
         if pdf_path == "about:blank":
@@ -132,7 +140,12 @@ class PdfJsWidget(QWidget):
         viewer_path = os.path.abspath('pdfjs/web/viewer.html')
         viewer_url = QUrl.fromLocalFile(viewer_path)
         pdf_url = QUrl.fromLocalFile(os.path.abspath(pdf_path)).toString()
-        full_url = QUrl(f"{viewer_url.toString()}?file={pdf_url}")
+
+        base_url = f"{viewer_url.toString()}?file={pdf_url}"
+        if self._locale:
+            full_url = QUrl(f"{base_url}#locale={self._locale}")
+        else:
+            full_url = QUrl(base_url)
         self.view.load(full_url)
 
     def on_load_finished(self, ok):
