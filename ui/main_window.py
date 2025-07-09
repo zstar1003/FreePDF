@@ -1021,7 +1021,7 @@ class AboutDialog(QDialog):
             QTextBrowser {
                 border: 1px solid #ddd;
                 border-radius: 8px;
-                padding: 15px;
+                padding: 10px;
                 background-color: #f9f9f9;
             }
         """)

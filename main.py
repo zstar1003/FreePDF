@@ -244,6 +244,23 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
     
+    # 全局字体设置
+    try:
+        from PyQt6.QtGui import QFont, QFontDatabase
+        font_path = get_resource_path(os.path.join('fonts', 'hy.ttf'))
+        if os.path.exists(font_path):
+            font_id = QFontDatabase.addApplicationFont(font_path)
+            if font_id != -1:
+                family = QFontDatabase.applicationFontFamilies(font_id)[0]
+                app.setFont(QFont(family, 10))
+                print(f"已加载并设置全局字体: {family}")
+            else:
+                print(f"加载字体失败: {font_path}")
+        else:
+            print(f"字体文件不存在: {font_path}")
+    except Exception as e:
+        print(f"设置全局字体出错: {e}")
+    
     # 设置应用程序属性
     app.setApplicationName("FreePDF")
     app.setApplicationVersion("1.0.0")
