@@ -158,14 +158,37 @@ class PdfJsWidget(QWidget):
                     /* Hide Open File, Print, and Add Image buttons */
                     #openFile,
                     #secondaryOpenFile,
-                    #print,
+                    #printButton,
                     #secondaryPrint,
+                    #viewBookmark,
+                    #viewBookmarkSeparator,
+                    #secondaryDownload,
                     #editorStamp, /* Main stamp button on the toolbar */
                     #editorStampAddImage {
                         display: none !important;
                     }
                 `;
                 document.head.appendChild(style);
+            """
+
+            # 把保存(下载)按钮移动到绘图按钮之后，始终可见
+            button_move_js = """
+                (function() {
+                    const dl = document.getElementById('downloadButton');
+                    if (!dl) return;
+                    // 先移除原位置（hiddenMediumView 容器）
+                    dl.parentElement.removeChild(dl);
+
+                    // 找到绘图按钮容器 (#editorInk) 并插入其后
+                    const inkContainer = document.getElementById('editorInk');
+                    if (inkContainer && inkContainer.parentElement) {
+                        inkContainer.parentElement.insertAdjacentElement('afterend', dl);
+                    } else {
+                        // 退而求其次，放到右侧工具栏分隔符前
+                        const rightGroup = document.getElementById('toolbarViewerRight');
+                        rightGroup.insertBefore(dl, document.getElementById('secondaryToolbarToggle'));
+                    }
+                })();
             """
 
             loader_script = f"""
@@ -177,6 +200,9 @@ class PdfJsWidget(QWidget):
                     setupPdfJsWidget('{self._name}');
                 }};
                 document.head.appendChild(script);
+
+                // 调整下载按钮位置
+                {button_move_js}
             """
             self.view.page().runJavaScript(loader_script)
 
