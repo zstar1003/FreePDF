@@ -23,9 +23,11 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSplitter,
     QStatusBar,
+    QProgressBar,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
+    QSizePolicy,
 )
 
 from core.translation import TranslationManager
@@ -296,7 +298,17 @@ class MainWindow(QMainWindow):
         
         # 状态标签
         self.status_label = StatusLabel()
+        # 限制标签横向可拉伸，避免遮挡进度条
+        self.status_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.status_bar.addWidget(self.status_label)
+
+        # 进度条
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimumWidth(200)
+        self.progress_bar.setFormat("%p%")
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setVisible(False)
+        self.status_bar.addPermanentWidget(self.progress_bar)
         
         # 页面信息已移除，使用更简洁的状态栏
         
@@ -618,6 +630,11 @@ class MainWindow(QMainWindow):
 
     def start_translation(self, file_path):
         """开始翻译PDF"""
+        # 显示并初始化进度条
+        if hasattr(self, 'progress_bar'):
+            self.progress_bar.setVisible(True)
+            self.progress_bar.setValue(0)
+            print(f"进度条显示状态: {self.progress_bar.isVisible()} (start_translation)")
         try:
             self.translation_manager.start_translation(
                 file_path,
@@ -631,8 +648,19 @@ class MainWindow(QMainWindow):
     @pyqtSlot(str)
     def on_translation_progress(self, message):
         """翻译进度更新"""
-        self.right_pdf_widget.view.setHtml(f"<div style='display:flex;justify-content:center;align-items:center;height:100%;font-size:16px;color:grey;'>{message}</div>")
-        self.status_label.set_status(message, "info")
+        if message.startswith("PROGRESS:"):
+            # 解析并更新进度条
+            try:
+                percent = int(message.split(":", 1)[1])
+                if hasattr(self, 'progress_bar'):
+                    self.progress_bar.setValue(percent)
+            except ValueError:
+                pass
+        else:
+            self.right_pdf_widget.view.setHtml(
+                f"<div style='display:flex;justify-content:center;align-items:center;height:100%;font-size:16px;color:grey;'>{message}</div>"
+            )
+            self.status_label.set_status(message, "info")
         
     @pyqtSlot(str)
     def on_translation_completed(self, translated_file):
@@ -640,6 +668,8 @@ class MainWindow(QMainWindow):
         if os.path.exists(translated_file):
             self.right_pdf_widget.load_pdf(translated_file)
             self.status_label.set_status("翻译完成", "success")
+        if hasattr(self, 'progress_bar'):
+            self.progress_bar.setVisible(False)
         else:
             self.on_translation_failed(f"翻译文件 '{translated_file}' 不存在")
             
@@ -716,6 +746,8 @@ class MainWindow(QMainWindow):
     def on_translation_failed(self, error_message):
         """翻译失败"""
         self.hide_loading()
+        if hasattr(self, 'progress_bar'):
+            self.progress_bar.setVisible(False)
         QMessageBox.critical(self, "翻译失败", f"翻译过程中出现错误:\n{error_message}")
         
     # def on_text_selected(self, text): # REMOVED: Feature not available in new widget

@@ -116,6 +116,43 @@ class TranslationThread(QThread):
                 sys.stdout = fake_stdout
                 sys.stderr = fake_stderr
                 print("在exe环境中运行，已重定向标准输出")
+
+            # 包装 stdout 以捕获 tqdm 等进度输出并通过 Qt 信号上报
+            class _ProgressStdout:
+                """捕获 stdout 中的 "xx%" 字样并发射进度百分比"""
+                def __init__(self, delegate, emit_fn):
+                    self._delegate = delegate
+                    self._emit_fn = emit_fn
+                    import re
+                    self._pattern = re.compile(r"(\d{1,3})%")
+                    self._last_percent = -1
+                def write(self, s):
+                    # 原始写入
+                    try:
+                        self._delegate.write(s)
+                    except Exception:
+                        pass
+                    # tqdm 会频繁使用回车覆盖行，可能一次 write 中含多个百分比；取最后一个
+                    matches = self._pattern.findall(s)
+                    if matches:
+                        try:
+                            percent = int(matches[-1])
+                            # 只在百分比变化时发信号，避免过度刷新
+                            if percent != self._last_percent:
+                                self._last_percent = percent
+                                self._emit_fn(percent)
+                        except Exception:
+                            pass
+                def flush(self):
+                    try:
+                        self._delegate.flush()
+                    except Exception:
+                        pass
+
+            # 将 sys.stdout / sys.stderr 再包装一层，用于进度捕获
+            progress_emit = lambda p: self.translation_progress.emit(f"PROGRESS:{p}")
+            sys.stdout = _ProgressStdout(sys.stdout, progress_emit)
+            sys.stderr = _ProgressStdout(sys.stderr, progress_emit)
             
             if self._stop_requested:
                 return
