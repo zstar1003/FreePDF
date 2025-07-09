@@ -2,7 +2,7 @@ import os
 
 from PyQt6.QtCore import QEvent, QObject, Qt, QUrl, pyqtSignal, pyqtSlot
 from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
+from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QWidget, QHBoxLayout
 
@@ -99,6 +99,15 @@ class PdfJsWidget(QWidget):
 
         # Create and configure the web view
         self.view = QWebEngineView()
+        
+        # --- 优化渲染，尝试解决拖拽闪烁问题 ---
+        # 1. 设置背景色为白色，避免闪烁时出现黑色背景
+        self.view.page().setBackgroundColor(Qt.GlobalColor.white)
+        
+        # 2. 尝试禁用2D画布的GPU加速，这有时能解决特定驱动下的渲染问题
+        settings = self.view.settings()
+        settings.setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, False)
+        
         self.view.setAcceptDrops(False)  # Disable drop events on the view
         page = WebEnginePage(self.profile, self.view)
         self.view.setPage(page)

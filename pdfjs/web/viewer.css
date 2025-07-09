@@ -2663,6 +2663,28 @@ body {
   float: var(--inline-start);
 }
 
+/* 修复toolbarViewerMiddle中的元素对齐 */
+#toolbarViewerMiddle > * {
+  vertical-align: middle;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 全局修复 - 确保toolbarViewerMiddleContainer不论屏幕大小都正确显示 */
+#toolbarViewerMiddleContainer {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  height: 28px !important;
+}
+
+/* 确保分割按钮组的对齐 */
+.splitToolbarButton {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 28px !important;
+}
+
 #toolbarViewerLeft {
   padding-inline-start: 1px;
 }
@@ -3481,6 +3503,31 @@ dialog :link {
   }
 }
 
+/* 修复大屏幕下的toolbarViewerMiddle对齐 */
+@media all and (min-width: 901px) {
+  #toolbarViewerMiddle {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    height: 32px;
+  }
+  
+  /* 确保toolbarViewerMiddleContainer正确布局 */
+  #toolbarViewerMiddleContainer {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  /* 让zoom按钮与dropdown正确对齐，但保持完整的toolbarButton样式 */
+  #toolbarViewerMiddleContainer > .toolbarButton {
+    /* 保持原有样式不变，只调整对齐 */
+    vertical-align: middle;
+  }
+}
+
 @media all and (max-width: 840px) {
   #sidebarContainer {
     background-color: var(--sidebar-narrow-bg-color);
@@ -3525,4 +3572,144 @@ dialog :link {
   #scaleSelectContainer {
     display: none;
   }
+}
+
+/* 自定义修复：改善zoom dropdown的行为 */
+.dropdownToolbarButton > select {
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+}
+
+/* 完全禁用option hover效果 - 使用更强的选择器 */
+#scaleSelect > option {
+  background: var(--doorhanger-bg-color) !important;
+  color: var(--main-color) !important;
+  padding: 4px 8px !important;
+}
+
+#scaleSelect > option:hover,
+#scaleSelect > option:focus {
+  background: var(--doorhanger-bg-color) !important;
+  color: var(--main-color) !important;
+}
+
+/* 只有选中状态才改变样式 */
+#scaleSelect > option:checked {
+  background: var(--button-hover-color) !important;
+  color: var(--toggled-btn-color) !important;
+}
+
+/* 通用禁用所有select的option hover */
+select > option {
+  background: var(--doorhanger-bg-color) !important;
+  color: var(--main-color) !important;
+}
+
+select > option:hover {
+  background: var(--doorhanger-bg-color) !important;
+  color: var(--main-color) !important;
+}
+
+/* 额外的强制措施 - 针对所有可能的状态 */
+#scaleSelect option,
+#scaleSelect option:hover,
+#scaleSelect option:focus,
+#scaleSelect option:active {
+  background-color: var(--doorhanger-bg-color) !important;
+  background: var(--doorhanger-bg-color) !important;
+  color: var(--main-color) !important;
+}
+
+/* 禁用系统默认的option高亮 */
+#scaleSelect {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+#scaleSelect option:checked {
+  background-color: var(--button-hover-color) !important;
+  background: var(--button-hover-color) !important;
+  color: var(--toggled-btn-color) !important;
+}
+
+/* 最强制的措施 - 使用CSS变量重置 */
+#scaleSelect option {
+  --option-bg: var(--doorhanger-bg-color);
+  --option-color: var(--main-color);
+  background-color: var(--option-bg) !important;
+  background: var(--option-bg) !important;
+  color: var(--option-color) !important;
+}
+
+/* 覆盖WebKit的默认选项样式 */
+#scaleSelect option:hover,
+#scaleSelect option:focus {
+  background-color: var(--doorhanger-bg-color) !important;
+  background: var(--doorhanger-bg-color) !important;
+  color: var(--main-color) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* 禁用所有伪元素 */
+#scaleSelect option::before,
+#scaleSelect option::after {
+  display: none !important;
+}
+
+/* 针对不同浏览器引擎的特定修复 */
+/* WebKit/Blink引擎 */
+#scaleSelect::-webkit-scrollbar {
+  width: 12px;
+}
+
+#scaleSelect option::-webkit-any() {
+  background: var(--doorhanger-bg-color) !important;
+  color: var(--main-color) !important;
+}
+
+/* Firefox引擎 */
+@-moz-document url-prefix() {
+  #scaleSelect option {
+    background-color: var(--doorhanger-bg-color) !important;
+    color: var(--main-color) !important;
+  }
+  
+  #scaleSelect option:hover {
+    background-color: var(--doorhanger-bg-color) !important;
+    color: var(--main-color) !important;
+  }
+}
+
+/* 最后的杀手锏 - 使用JavaScript禁用（如果CSS不起作用） */
+#scaleSelect option[data-hover-disabled] {
+  pointer-events: none;
+}
+
+#scaleSelect option[data-hover-disabled]:hover {
+  background: var(--doorhanger-bg-color) !important;
+  color: var(--main-color) !important;
+}
+
+/* 改善dropdown容器的定位和显示 */
+#scaleSelectContainer {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 4px;
+}
+
+/* 确保dropdown与工具栏按钮对齐 */
+.dropdownToolbarButton {
+  height: 28px !important;
+  vertical-align: middle;
+  display: inline-flex;
+  align-items: center;
+}
+
+.dropdownToolbarButton > select:focus {
+  outline: none;
+  box-shadow: none;
 }
