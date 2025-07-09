@@ -20,14 +20,14 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
+    QProgressBar,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QStatusBar,
-    QProgressBar,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
-    QSizePolicy,
 )
 
 from core.translation import TranslationManager
@@ -298,17 +298,18 @@ class MainWindow(QMainWindow):
         
         # 状态标签
         self.status_label = StatusLabel()
-        # 限制标签横向可拉伸，避免遮挡进度条
-        self.status_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        # 标签可拉伸，进度条固定
+        self.status_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        self.status_label.setMaximumWidth(400)
         self.status_bar.addWidget(self.status_label)
 
-        # 进度条
+        # 进度条（放在状态标签右侧）
         self.progress_bar = QProgressBar()
-        self.progress_bar.setMinimumWidth(200)
+        self.progress_bar.setFixedWidth(220)
         self.progress_bar.setFormat("%p%")
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setVisible(False)
-        self.status_bar.addPermanentWidget(self.progress_bar)
+        self.status_bar.addWidget(self.progress_bar)
         
         # 页面信息已移除，使用更简洁的状态栏
         
@@ -657,10 +658,11 @@ class MainWindow(QMainWindow):
             except ValueError:
                 pass
         else:
+            sanitized = message.replace("\n", " ")
             self.right_pdf_widget.view.setHtml(
-                f"<div style='display:flex;justify-content:center;align-items:center;height:100%;font-size:16px;color:grey;'>{message}</div>"
+                f"<div style='display:flex;justify-content:center;align-items:center;height:100%;font-size:16px;color:grey;'>{sanitized}</div>"
             )
-            self.status_label.set_status(message, "info")
+            self.status_label.set_status(sanitized, "info")
         
     @pyqtSlot(str)
     def on_translation_completed(self, translated_file):
