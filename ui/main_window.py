@@ -334,7 +334,7 @@ class MainWindow(QMainWindow):
         if self.current_file:
             base, _ = os.path.splitext(os.path.basename(self.current_file))
             # Suggest a name for the saved file (e.g., original_saved.pdf)
-            original_filename = f"{base}_saved.pdf"
+            original_filename = f"{base}-mono.pdf"
 
         # Open a "Save As" dialog
         path, _ = QFileDialog.getSaveFileName(
