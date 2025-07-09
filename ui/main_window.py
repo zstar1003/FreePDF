@@ -306,10 +306,29 @@ class MainWindow(QMainWindow):
         # 进度条（放在状态标签右侧）
         self.progress_bar = QProgressBar()
         self.progress_bar.setFixedWidth(220)
-        self.progress_bar.setFormat("%p%")
         self.progress_bar.setRange(0, 100)
+        self.progress_bar.setTextVisible(False)  # 百分比单独显示
+        # 美化样式
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #bbb;
+                border-radius: 3px;
+                background-color: #eee;
+                height: 12px;
+            }
+            QProgressBar::chunk {
+                background-color: #28a745;
+                border-radius: 3px;
+            }
+        """)
         self.progress_bar.setVisible(False)
         self.status_bar.addWidget(self.progress_bar)
+
+        # 百分比标签
+        self.progress_percent = QLabel("0%")
+        self.progress_percent.setStyleSheet("color: #28a745; font-weight: bold; margin-left: 4px;")
+        self.progress_percent.setVisible(False)
+        self.status_bar.addWidget(self.progress_percent)
         
         # 页面信息已移除，使用更简洁的状态栏
         
@@ -635,6 +654,9 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'progress_bar'):
             self.progress_bar.setVisible(True)
             self.progress_bar.setValue(0)
+            if hasattr(self, 'progress_percent'):
+                self.progress_percent.setText("0%")
+                self.progress_percent.setVisible(True)
             print(f"进度条显示状态: {self.progress_bar.isVisible()} (start_translation)")
         try:
             self.translation_manager.start_translation(
@@ -655,6 +677,8 @@ class MainWindow(QMainWindow):
                 percent = int(message.split(":", 1)[1])
                 if hasattr(self, 'progress_bar'):
                     self.progress_bar.setValue(percent)
+                if hasattr(self, 'progress_percent'):
+                    self.progress_percent.setText(f"{percent}%")
             except ValueError:
                 pass
         else:
@@ -672,6 +696,8 @@ class MainWindow(QMainWindow):
             self.status_label.set_status("翻译完成", "success")
         if hasattr(self, 'progress_bar'):
             self.progress_bar.setVisible(False)
+        if hasattr(self, 'progress_percent'):
+            self.progress_percent.setVisible(False)
         else:
             self.on_translation_failed(f"翻译文件 '{translated_file}' 不存在")
             
@@ -750,6 +776,8 @@ class MainWindow(QMainWindow):
         self.hide_loading()
         if hasattr(self, 'progress_bar'):
             self.progress_bar.setVisible(False)
+        if hasattr(self, 'progress_percent'):
+            self.progress_percent.setVisible(False)
         QMessageBox.critical(self, "翻译失败", f"翻译过程中出现错误:\n{error_message}")
         
     # def on_text_selected(self, text): # REMOVED: Feature not available in new widget
