@@ -2351,6 +2351,22 @@ body {
 
 #toolbarViewer {
   height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+#toolbarViewerLeft,
+#toolbarViewerRight {
+  flex-grow: 1;
+}
+
+#toolbarViewerMiddle {
+  flex-shrink: 0; /* 防止中间容器被压缩 */
+}
+
+#toolbarViewerRight {
+  display: flex;
+  justify-content: flex-end;
 }
 
 #loadingBar {
