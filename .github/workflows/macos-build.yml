@@ -33,7 +33,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller build_exe.spec --noconfirm
+          pyinstaller build.spec --noconfirm
 
       - name: Compress app
         run: |
