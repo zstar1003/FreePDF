@@ -602,6 +602,13 @@ class MainWindow(QMainWindow):
         self.left_pdf_widget.load_pdf(file_path)
         self.status_label.set_status(f"已加载: {os.path.basename(file_path)}", "success")
 
+        # 读取配置判断是否启用翻译
+        if not self._is_translation_enabled():
+            # 直接在右侧加载原始文件，不进行翻译
+            self.right_pdf_widget.load_pdf(file_path)
+            self.status_label.set_status("翻译已禁用，直接显示原文", "info")
+            return
+
         # 检查同目录是否已有翻译后的 -mono 文件
         existing = self._find_existing_translation(file_path)
         if existing:
@@ -613,6 +620,20 @@ class MainWindow(QMainWindow):
         # 否则开始翻译
         self.right_pdf_widget.view.setHtml("<div style='display:flex;justify-content:center;align-items:center;height:100%;font-size:16px;color:grey;'>正在准备翻译...</div>")
         self.start_translation(file_path)
+
+    def _is_translation_enabled(self):
+        """从配置文件判断是否启用翻译 (默认启用)"""
+        import json
+        import os
+        cfg_path = "pdf2zh_config.json"
+        if not os.path.exists(cfg_path):
+            return True
+        try:
+            with open(cfg_path, 'r', encoding='utf-8') as f:
+                cfg = json.load(f)
+            return bool(cfg.get("translation_enabled", True))
+        except Exception:
+            return True
 
     def _find_existing_translation(self, original_path):
         """检查是否存在已翻译的 -mono 文件并验证有效性"""

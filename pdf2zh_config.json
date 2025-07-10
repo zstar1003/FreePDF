@@ -20,5 +20,6 @@
         "envs": {}
     },
     "offline_mode": true,
+    "translation_enabled": true,
     "NOTO_FONT_PATH": "./fonts/SourceHanSerifCN-Regular.ttf"
 }
