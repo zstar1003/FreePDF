@@ -972,9 +972,9 @@ class TranslationConfigDialog(QDialog):
             if self.silicon_api_key.text().strip():
                 headers["Authorization"] = f"Bearer {self.silicon_api_key.text().strip()}"
         elif service == "bing":
-            url = "https://www.bing.com"
+            url = "https://www.bing.com/translator"
         elif service == "google":
-            url = "https://translate.googleapis.com"
+            url = "https://translate.google.com/m"
         if not url:
             QMessageBox.warning(self, "测试连接", "缺少可测试的 Host")
             return
@@ -1020,7 +1020,7 @@ class TranslationConfigDialog(QDialog):
             ok = False
             msg = ""
             try:
-                r = requests.head(url, headers=headers, timeout=3, allow_redirects=True)
+                r = requests.head(url, headers=headers, timeout=10, allow_redirects=True)
                 if r.status_code == 200:
                     ok = True
                 msg = f"状态码: {r.status_code}"
