@@ -1,11 +1,14 @@
 """UI组件模块"""
 
 import math
-
-from PyQt6.QtCore import Qt, QTimer, QTimer as _QTimer, pyqtSignal
 import threading
+
+import requests
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QTimer as _QTimer
 from PyQt6.QtGui import QColor, QPainter
 from PyQt6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
     QFormLayout,
@@ -13,6 +16,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QProgressBar,
     QPushButton,
     QSizePolicy,
@@ -20,10 +24,7 @@ from PyQt6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
-    QMessageBox,
-    QApplication
 )
-import requests
 
 
 class AnimationOverlay(QWidget):
@@ -639,7 +640,7 @@ class TranslationConfigDialog(QDialog):
         elif service == "ollama":
             # 创建Ollama问答配置控件
             self.qa_ollama_host = QLineEdit()
-            self.qa_ollama_host.setPlaceholderText("例如: http://127.0.0.1:11434")
+            self.qa_ollama_host.setPlaceholderText("例如: http://127.0.0.1:11434/api/generate")
             self.qa_ollama_model = QLineEdit()
             self.qa_ollama_model.setPlaceholderText("例如: deepseek-r1:1.5b")
             
@@ -722,7 +723,7 @@ class TranslationConfigDialog(QDialog):
         elif service == "ollama":
             # 创建Ollama配置控件
             self.ollama_host = QLineEdit()
-            self.ollama_host.setPlaceholderText("例如: http://127.0.0.1:11434")
+            self.ollama_host.setPlaceholderText("例如: http://127.0.0.1:11434/api/generate")
             self.ollama_model = QLineEdit()
             self.ollama_model.setPlaceholderText("例如: deepseek-r1:1.5b")
             
@@ -961,43 +962,53 @@ class TranslationConfigDialog(QDialog):
     # ================== 连接测试 ==================
     def _test_trans_connection(self):
         service = self.service_combo.currentText()
-        url = ""
+        url = "" 
         headers = {}
+        expect_model = None
         if service == "自定义" and hasattr(self, 'custom_host'):
             url = self.custom_host.text().strip()
+            expect_model = self.custom_model.text().strip() if hasattr(self,'custom_model') else None
         elif service == "ollama" and hasattr(self, 'ollama_host'):
-            url = self.ollama_host.text().strip()+"/api/tags"
-        elif service == "silicon" and hasattr(self, 'silicon_api_key'):
-            url = "https://api.siliconflow.ai/v1/models"
-            if self.silicon_api_key.text().strip():
+            url = self.ollama_host.text().strip()
+            expect_model = self.ollama_model.text().strip() if hasattr(self,'ollama_model') else None
+        elif service == "silicon":
+            url = "https://api.siliconflow.cn/v1"
+            expect_model = self.silicon_model.text().strip() if hasattr(self,'silicon_model') else None
+            if hasattr(self, 'silicon_api_key') and self.silicon_api_key.text().strip():
                 headers["Authorization"] = f"Bearer {self.silicon_api_key.text().strip()}"
         elif service == "bing":
             url = "https://www.bing.com/translator"
         elif service == "google":
             url = "https://translate.google.com/m"
+
         if not url:
             QMessageBox.warning(self, "测试连接", "缺少可测试的 Host")
             return
-        self._perform_connection_test(url, headers, is_qa=False)
+
+        self._perform_connection_test(service, url, headers, expect_model, is_qa=False)
 
     def _test_qa_connection(self):
         service = self.qa_service_combo.currentText()
-        url = ""
-        headers = {}
+        url = "" 
+        headers = {} 
+        expect_model = None
         if service == "自定义" and hasattr(self, 'custom_qa_host'):
             url = self.custom_qa_host.text().strip()
+            expect_model = self.custom_qa_model.text().strip() if hasattr(self,'custom_qa_model') else None
         elif service == "ollama" and hasattr(self, 'qa_ollama_host'):
-            url = self.qa_ollama_host.text().strip()+"/api/tags"
+            url = self.qa_ollama_host.text().strip()
+            expect_model = self.qa_ollama_model.text().strip() if hasattr(self,'qa_ollama_model') else None
         elif service == "silicon" and hasattr(self, 'qa_silicon_api_key'):
             url = "https://api.siliconflow.ai/v1/models"
+            expect_model = self.qa_silicon_model.text().strip() if hasattr(self,'qa_silicon_model') else None
             if self.qa_silicon_api_key.text().strip():
                 headers["Authorization"] = f"Bearer {self.qa_silicon_api_key.text().strip()}"
         if not url:
             QMessageBox.warning(self, "测试连接", "缺少可测试的 Host")
             return
-        self._perform_connection_test(url, headers, is_qa=True)
+        self._perform_connection_test(service, url, headers, expect_model, is_qa=True)
 
-    def _perform_connection_test(self, url, headers, is_qa=False):
+    def _perform_connection_test(self, service, url, headers, expect_model=None, is_qa=False):
         # 按钮引用
         btn = self.qa_test_btn if is_qa else self.trans_test_btn
         btn.setEnabled(False)
@@ -1020,10 +1031,31 @@ class TranslationConfigDialog(QDialog):
             ok = False
             msg = ""
             try:
-                r = requests.head(url, headers=headers, timeout=10, allow_redirects=True)
-                if r.status_code == 200:
-                    ok = True
-                msg = f"状态码: {r.status_code}"
+                # 针对不同服务发送最小有效请求
+                if service in ("ollama", "自定义") and expect_model:
+                    # Ollama / Custom: POST /api/generate
+                    gen_url = url
+                    payload = {"model": expect_model, "prompt": "ping", "stream": False}
+                    print(gen_url)
+                    r = requests.post(gen_url, headers=headers, json=payload, timeout=8)
+                    ok = (r.status_code == 200)
+                    msg = f"状态码: {r.status_code}" if not ok else ""
+                elif service == "silicon" and expect_model:
+                    sil_url = url.rstrip('/') + "/chat/completions"
+                    payload = {
+                        "model": expect_model,
+                        "messages": [{"role": "user", "content": "ping"}],
+                        "max_tokens": 1,
+                        "stream": False
+                    }
+                    r = requests.post(sil_url, headers=headers, json=payload, timeout=8)
+                    ok = (r.status_code == 200)
+                    msg = f"状态码: {r.status_code}" if not ok else ""
+                else:
+                    # 简单 GET/HEAD 测试
+                    r = requests.get(url, headers=headers, timeout=10)
+                    ok = (r.status_code == 200)
+                    msg = f"状态码: {r.status_code}" if not ok else ""
             except Exception as e:
                 msg = str(e)
 

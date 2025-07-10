@@ -7,19 +7,19 @@
 
 # Program Information
 Name "FreePDF"
-OutFile "FreePDF_Setup.exe"
+OutFile "FreePDF_v4.0.0_Setup.exe"
 InstallDir "$PROGRAMFILES64\FreePDF"
 InstallDirRegKey HKLM "Software\FreePDF" "InstallPath"
 RequestExecutionLevel admin
 
 # Version Information
-VIProductVersion "3.0.0.0"
+VIProductVersion "4.0.0.0"
 VIAddVersionKey "ProductName" "FreePDF"
 VIAddVersionKey "Comments" "Free PDF Translation Tool"
 VIAddVersionKey "CompanyName" "FreePDF Team"
 VIAddVersionKey "FileDescription" "FreePDF Setup"
-VIAddVersionKey "FileVersion" "3.0.0.0"
-VIAddVersionKey "ProductVersion" "3.0.0.0"
+VIAddVersionKey "FileVersion" "4.0.0.0"
+VIAddVersionKey "ProductVersion" "4.0.0.0"
 VIAddVersionKey "InternalName" "FreePDF"
 VIAddVersionKey "LegalCopyright" "© 2025 FreePDF Team"
 VIAddVersionKey "OriginalFilename" "FreePDF_Setup.exe"
@@ -67,7 +67,7 @@ Section "FreePDF" SecMain
     
     # Registry entries
     WriteRegStr HKLM "Software\FreePDF" "InstallPath" "$INSTDIR"
-    WriteRegStr HKLM "Software\FreePDF" "Version" "3.0.0"
+    WriteRegStr HKLM "Software\FreePDF" "Version" "4.0.0"
     
     # Add to control panel programs list
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "DisplayName" "FreePDF"
@@ -75,7 +75,7 @@ Section "FreePDF" SecMain
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "InstallLocation" "$INSTDIR"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "DisplayIcon" "$INSTDIR\FreePDF.exe"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "Publisher" "FreePDF Team"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "DisplayVersion" "3.0.0"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "DisplayVersion" "4.0.0"
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "NoModify" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\FreePDF" "NoRepair" 1
     
@@ -113,14 +113,14 @@ Function .onInit
     StrCmp $R0 "" done
     
     # Check version for better update messaging
-    StrCmp $R1 "3.0.0" same_version different_version
+    StrCmp $R1 "4.0.0" same_version different_version
     
     same_version:
-        MessageBox MB_OKCANCEL|MB_ICONQUESTION "FreePDF v3.0.0 is already installed.$\n$\nClick OK to reinstall or Cancel to exit." IDOK uninst
+        MessageBox MB_OKCANCEL|MB_ICONQUESTION "FreePDF v4.0.0 is already installed.$\n$\nClick OK to reinstall or Cancel to exit." IDOK uninst
         Abort
         
     different_version:
-        MessageBox MB_OKCANCEL|MB_ICONINFORMATION "FreePDF $R1 is installed.$\n$\nClick OK to upgrade to v3.0.0 or Cancel to exit." IDOK uninst
+        MessageBox MB_OKCANCEL|MB_ICONINFORMATION "FreePDF $R1 is installed.$\n$\nClick OK to upgrade to v4.0.0 or Cancel to exit." IDOK uninst
         Abort
     
     uninst:
