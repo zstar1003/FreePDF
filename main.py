@@ -263,7 +263,7 @@ if __name__ == "__main__":
     
     # 设置应用程序属性
     app.setApplicationName("FreePDF")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion("4.0.0")
     app.setOrganizationName("zstar")
     
     # 预热WebEngine，提前初始化核心组件

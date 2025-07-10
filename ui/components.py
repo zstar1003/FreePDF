@@ -2,7 +2,8 @@
 
 import math
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QTimer as _QTimer, pyqtSignal
+import threading
 from PyQt6.QtGui import QColor, QPainter
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -19,7 +20,10 @@ from PyQt6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QMessageBox,
+    QApplication
 )
+import requests
 
 
 class AnimationOverlay(QWidget):
@@ -388,12 +392,13 @@ class DragDropOverlay(QWidget):
 
 
 class TranslationConfigDialog(QDialog):
+    connection_test_finished = pyqtSignal(object, bool, str)
     """引擎配置对话框"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("引擎配置")
-        self.setFixedSize(480, 720)
+        self.setFixedSize(650, 900)
         self.setModal(True)
         
         # 加载当前配置
@@ -401,6 +406,8 @@ class TranslationConfigDialog(QDialog):
         
         # 创建UI
         self.setup_ui()
+        
+        self.connection_test_finished.connect(self._on_connection_result)
         
     def setup_ui(self):
         """设置UI界面"""
@@ -517,7 +524,7 @@ class TranslationConfigDialog(QDialog):
         
         # 问答引擎选择
         self.qa_service_combo = QComboBox()
-        self.qa_service_combo.addItems(["关闭", "silicon", "ollama"])
+        self.qa_service_combo.addItems(["关闭", "silicon", "ollama", "自定义"])
         self.qa_service_combo.currentTextChanged.connect(self.on_qa_service_changed)
         qa_layout.addRow("问答引擎:", self.qa_service_combo)
         
@@ -609,6 +616,26 @@ class TranslationConfigDialog(QDialog):
             
             self.qa_env_layout.addRow("API Key:", self.qa_silicon_api_key)
             self.qa_env_layout.addRow("模型:", self.qa_silicon_model)
+            self.qa_test_btn = QPushButton("测试连接")
+            self.qa_test_btn.clicked.connect(self._test_qa_connection)
+            self.qa_test_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #17a2b8;
+                    color: white;
+                    border: none;
+                    padding: 6px 18px;
+                    border-radius: 4px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #138496;
+                }
+                QPushButton:disabled {
+                    background-color: #6c757d;
+                    color: #efefef;
+                }
+            """)
+            self.qa_env_layout.addRow("", self.qa_test_btn)
         elif service == "ollama":
             # 创建Ollama问答配置控件
             self.qa_ollama_host = QLineEdit()
@@ -618,6 +645,59 @@ class TranslationConfigDialog(QDialog):
             
             self.qa_env_layout.addRow("服务地址:", self.qa_ollama_host)
             self.qa_env_layout.addRow("模型:", self.qa_ollama_model)
+            self.qa_test_btn = QPushButton("测试连接")
+            self.qa_test_btn.clicked.connect(self._test_qa_connection)
+            self.qa_test_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #17a2b8;
+                    color: white;
+                    border: none;
+                    padding: 6px 18px;
+                    border-radius: 4px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #138496;
+                }
+                QPushButton:disabled {
+                    background-color: #6c757d;
+                    color: #efefef;
+                }
+            """)
+            self.qa_env_layout.addRow("", self.qa_test_btn)
+        elif service == "自定义":
+            # 自定义问答引擎
+            self.custom_qa_host = QLineEdit()
+            self.custom_qa_host.setPlaceholderText("http://example.com/api")
+            self.custom_qa_key = QLineEdit()
+            self.custom_qa_key.setPlaceholderText("可选: API Key")
+            self.custom_qa_model = QLineEdit()
+            self.custom_qa_model.setPlaceholderText("可选: 模型")
+
+            self.qa_test_btn = QPushButton("测试连接")
+            self.qa_test_btn.clicked.connect(self._test_qa_connection)
+            self.qa_test_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #17a2b8;
+                    color: white;
+                    border: none;
+                    padding: 6px 18px;
+                    border-radius: 4px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #138496;
+                }
+                QPushButton:disabled {
+                    background-color: #6c757d;
+                    color: #efefef;
+                }
+            """)
+
+            self.qa_env_layout.addRow("Host:", self.custom_qa_host)
+            self.qa_env_layout.addRow("API Key:", self.custom_qa_key)
+            self.qa_env_layout.addRow("模型:", self.custom_qa_model)
+            self.qa_env_layout.addRow("", self.qa_test_btn)
         else:
             # 关闭问答引擎
             info_label = QLabel("问答引擎已关闭")
@@ -648,11 +728,44 @@ class TranslationConfigDialog(QDialog):
             
             self.env_layout.addRow("服务地址:", self.ollama_host)
             self.env_layout.addRow("模型:", self.ollama_model)
+        elif service == "自定义":
+            # 自定义翻译服务
+            self.custom_host = QLineEdit()
+            self.custom_host.setPlaceholderText("http://example.com/api")
+            self.custom_key = QLineEdit()
+            self.custom_key.setPlaceholderText("可选: API Key")
+            self.custom_model = QLineEdit()
+            self.custom_model.setPlaceholderText("可选: 模型")
+
+            self.env_layout.addRow("模型:", self.custom_model)
+
         else:
             # Google/Bing 不需要额外配置
             info_label = QLabel("该翻译引擎无需额外配置")
             info_label.setStyleSheet("color: #6c757d; font-style: italic;")
             self.env_layout.addRow(info_label)
+
+        # 统一添加测试按钮
+        self.trans_test_btn = QPushButton("测试连接")
+        self.trans_test_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #17a2b8;
+                color: white;
+                border: none;
+                padding: 6px 18px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #138496;
+            }
+            QPushButton:disabled {
+                background-color: #6c757d;
+                color: #efefef;
+            }
+        """)
+        self.trans_test_btn.clicked.connect(self._test_trans_connection)
+        self.env_layout.addRow("", self.trans_test_btn)
             
     def load_current_config(self):
         """加载当前配置"""
@@ -711,6 +824,13 @@ class TranslationConfigDialog(QDialog):
                 config["envs"]["OLLAMA_HOST"] = self.ollama_host.text().strip()
             if hasattr(self, 'ollama_model') and self.ollama_model.text().strip():
                 config["envs"]["OLLAMA_MODEL"] = self.ollama_model.text().strip()
+        elif service == "自定义":
+            if hasattr(self, 'custom_host') and self.custom_host.text().strip():
+                config["envs"]["CUSTOM_HOST"] = self.custom_host.text().strip()
+            if hasattr(self, 'custom_key') and self.custom_key.text().strip():
+                config["envs"]["CUSTOM_KEY"] = self.custom_key.text().strip()
+            if hasattr(self, 'custom_model') and self.custom_model.text().strip():
+                config["envs"]["CUSTOM_MODEL"] = self.custom_model.text().strip()
         
         # 读取现有的完整配置文件
         config_file = "pdf2zh_config.json"
@@ -740,6 +860,13 @@ class TranslationConfigDialog(QDialog):
                 qa_config["envs"]["OLLAMA_HOST"] = self.qa_ollama_host.text().strip()
             if hasattr(self, 'qa_ollama_model') and self.qa_ollama_model.text().strip():
                 qa_config["envs"]["OLLAMA_MODEL"] = self.qa_ollama_model.text().strip()
+        elif qa_service == "自定义":
+            if hasattr(self, 'custom_qa_host') and self.custom_qa_host.text().strip():
+                qa_config["envs"]["CUSTOM_HOST"] = self.custom_qa_host.text().strip()
+            if hasattr(self, 'custom_qa_key') and self.custom_qa_key.text().strip():
+                qa_config["envs"]["CUSTOM_KEY"] = self.custom_qa_key.text().strip()
+            if hasattr(self, 'custom_qa_model') and self.custom_qa_model.text().strip():
+                qa_config["envs"]["CUSTOM_MODEL"] = self.custom_qa_model.text().strip()
         
         # 更新翻译配置部分
         full_config["translation"] = config
@@ -783,6 +910,12 @@ class TranslationConfigDialog(QDialog):
             self.ollama_host.setText(envs["OLLAMA_HOST"])
         if hasattr(self, 'ollama_model') and "OLLAMA_MODEL" in envs:
             self.ollama_model.setText(envs["OLLAMA_MODEL"])
+        if hasattr(self, 'custom_host') and "CUSTOM_HOST" in envs:
+            self.custom_host.setText(envs["CUSTOM_HOST"])
+        if hasattr(self, 'custom_key') and "CUSTOM_KEY" in envs:
+            self.custom_key.setText(envs["CUSTOM_KEY"])
+        if hasattr(self, 'custom_model') and "CUSTOM_MODEL" in envs:
+            self.custom_model.setText(envs["CUSTOM_MODEL"])
             
         # 设置问答引擎
         qa_service = self.current_qa_config.get("service", "关闭")
@@ -800,6 +933,12 @@ class TranslationConfigDialog(QDialog):
             self.qa_ollama_host.setText(qa_envs["OLLAMA_HOST"])
         if hasattr(self, 'qa_ollama_model') and "OLLAMA_MODEL" in qa_envs:
             self.qa_ollama_model.setText(qa_envs["OLLAMA_MODEL"])
+        if hasattr(self, 'custom_qa_host') and "CUSTOM_HOST" in qa_envs:
+            self.custom_qa_host.setText(qa_envs["CUSTOM_HOST"])
+        if hasattr(self, 'custom_qa_key') and "CUSTOM_KEY" in qa_envs:
+            self.custom_qa_key.setText(qa_envs["CUSTOM_KEY"])
+        if hasattr(self, 'custom_qa_model') and "CUSTOM_MODEL" in qa_envs:
+            self.custom_qa_model.setText(qa_envs["CUSTOM_MODEL"])
             
     def showEvent(self, event):
         """显示对话框时应用配置"""
@@ -818,6 +957,88 @@ class TranslationConfigDialog(QDialog):
     def get_qa_config(self):
         """获取问答引擎配置"""
         return self.current_qa_config.copy()
+
+    # ================== 连接测试 ==================
+    def _test_trans_connection(self):
+        service = self.service_combo.currentText()
+        url = ""
+        headers = {}
+        if service == "自定义" and hasattr(self, 'custom_host'):
+            url = self.custom_host.text().strip()
+        elif service == "ollama" and hasattr(self, 'ollama_host'):
+            url = self.ollama_host.text().strip()+"/api/tags"
+        elif service == "silicon" and hasattr(self, 'silicon_api_key'):
+            url = "https://api.siliconflow.ai/v1/models"
+            if self.silicon_api_key.text().strip():
+                headers["Authorization"] = f"Bearer {self.silicon_api_key.text().strip()}"
+        elif service == "bing":
+            url = "https://www.bing.com"
+        elif service == "google":
+            url = "https://translate.googleapis.com"
+        if not url:
+            QMessageBox.warning(self, "测试连接", "缺少可测试的 Host")
+            return
+        self._perform_connection_test(url, headers, is_qa=False)
+
+    def _test_qa_connection(self):
+        service = self.qa_service_combo.currentText()
+        url = ""
+        headers = {}
+        if service == "自定义" and hasattr(self, 'custom_qa_host'):
+            url = self.custom_qa_host.text().strip()
+        elif service == "ollama" and hasattr(self, 'qa_ollama_host'):
+            url = self.qa_ollama_host.text().strip()+"/api/tags"
+        elif service == "silicon" and hasattr(self, 'qa_silicon_api_key'):
+            url = "https://api.siliconflow.ai/v1/models"
+            if self.qa_silicon_api_key.text().strip():
+                headers["Authorization"] = f"Bearer {self.qa_silicon_api_key.text().strip()}"
+        if not url:
+            QMessageBox.warning(self, "测试连接", "缺少可测试的 Host")
+            return
+        self._perform_connection_test(url, headers, is_qa=True)
+
+    def _perform_connection_test(self, url, headers, is_qa=False):
+        # 按钮引用
+        btn = self.qa_test_btn if is_qa else self.trans_test_btn
+        btn.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+
+        # 若网络阻塞，10 秒后强制恢复界面
+        def fallback_restore():
+            try:
+                if btn.isEnabled():
+                    return  # 已恢复
+                btn.setEnabled(True)
+            except RuntimeError:
+                # 按钮已被删除
+                pass
+            finally:
+                QApplication.restoreOverrideCursor()
+        _QTimer.singleShot(10000, fallback_restore)
+
+        def worker():
+            ok = False
+            msg = ""
+            try:
+                r = requests.head(url, headers=headers, timeout=3, allow_redirects=True)
+                if r.status_code == 200:
+                    ok = True
+                msg = f"状态码: {r.status_code}"
+            except Exception as e:
+                msg = str(e)
+
+            # emit result back to GUI thread
+            self.connection_test_finished.emit(btn, ok, msg)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_connection_result(self, btn, ok, msg):
+        QApplication.restoreOverrideCursor()
+        btn.setEnabled(True)
+        if ok:
+            QMessageBox.information(self, "测试连接", "连接成功！")
+        else:
+            QMessageBox.critical(self, "测试连接", f"连接失败！\n{msg}")
 
 
 class QADialog(QDialog):
