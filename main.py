@@ -247,7 +247,7 @@ if __name__ == "__main__":
     # 全局字体设置
     try:
         from PyQt6.QtGui import QFont, QFontDatabase
-        font_path = get_resource_path(os.path.join('fonts', 'hy.ttf'))
+        font_path = get_resource_path(os.path.join('fonts', 'ht.ttf'))
         if os.path.exists(font_path):
             font_id = QFontDatabase.addApplicationFont(font_path)
             if font_id != -1:
