@@ -999,7 +999,7 @@ class TranslationConfigDialog(QDialog):
             url = self.qa_ollama_host.text().strip()
             expect_model = self.qa_ollama_model.text().strip() if hasattr(self,'qa_ollama_model') else None
         elif service == "silicon" and hasattr(self, 'qa_silicon_api_key'):
-            url = "https://api.siliconflow.ai/v1/models"
+            url = "https://api.siliconflow.cn/v1"
             expect_model = self.qa_silicon_model.text().strip() if hasattr(self,'qa_silicon_model') else None
             if self.qa_silicon_api_key.text().strip():
                 headers["Authorization"] = f"Bearer {self.qa_silicon_api_key.text().strip()}"
