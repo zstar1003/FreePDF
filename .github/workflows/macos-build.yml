@@ -40,7 +40,12 @@ jobs:
       - name: Compress app
         run: |
           cd dist
-          zip -r FreePDF-${{ matrix.arch }}.zip FreePDF.app
+          TARGET="FreePDF.app"
+          if [ ! -d "$TARGET" ]; then
+            TARGET="FreePDF"
+          fi
+          echo "Zipping $TARGET"
+          zip -r FreePDF-${{ matrix.arch }}.zip "$TARGET"
           cd ..
 
       - name: Upload Artifact
