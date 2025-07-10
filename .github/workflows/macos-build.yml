@@ -35,20 +35,19 @@ jobs:
         run: |
           pyinstaller build.spec --noconfirm
 
-      - name: Compress app
+      - name: Prepare bundle
         run: |
-          cd dist
-          TARGET="FreePDF.app"
-          if [ ! -d "$TARGET" ]; then
-            TARGET="FreePDF"
-          fi
-          echo "Zipping $TARGET"
-          zip -r FreePDF-${{ matrix.arch }}.zip "$TARGET"
-          cd ..
+          mkdir -p package
+          mv dist/FreePDF.app package/
+          cp -R fonts ui pdfjs models pdf2zh_config.json package/
+
+      - name: Create DMG
+        run: |
+          hdiutil create -volname FreePDF -srcfolder package -ov -format UDZO FreePDF-${{ matrix.arch }}.dmg
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: FreePDF-mac-${{ matrix.arch }}
-          path: dist/FreePDF-${{ matrix.arch }}.zip
+          path: FreePDF-${{ matrix.arch }}.dmg
           if-no-files-found: error 
