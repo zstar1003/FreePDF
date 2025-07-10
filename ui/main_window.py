@@ -601,10 +601,26 @@ class MainWindow(QMainWindow):
         self.current_file = file_path
         self.left_pdf_widget.load_pdf(file_path)
         self.status_label.set_status(f"已加载: {os.path.basename(file_path)}", "success")
-        
-        # Show a loading message in the right panel and start the actual translation
+
+        # 检查同目录是否已有翻译后的 -mono 文件
+        existing = self._find_existing_translation(file_path)
+        if existing:
+            # 直接加载现有翻译版本
+            self.right_pdf_widget.load_pdf(existing)
+            self.status_label.set_status("已加载本地翻译版本", "success")
+            return
+
+        # 否则开始翻译
         self.right_pdf_widget.view.setHtml("<div style='display:flex;justify-content:center;align-items:center;height:100%;font-size:16px;color:grey;'>正在准备翻译...</div>")
         self.start_translation(file_path)
+
+    def _find_existing_translation(self, original_path):
+        """检查是否存在已翻译的 -mono 文件并验证有效性"""
+        base, ext = os.path.splitext(original_path)
+        mono_path = f"{base}-mono{ext}"
+        if os.path.exists(mono_path) and self._validate_pdf_file(mono_path):
+            return mono_path
+        return None
 
     def _force_left_pdf_display(self):
         """强制显示左侧PDF视图"""
