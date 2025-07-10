@@ -113,12 +113,14 @@ a = Analysis(
     datas=[
         # 配置文件
         ('pdf2zh_config.json', '.'),
+        # ui文件
+        ('ui', '.'),
         # 模型文件
         ('models/', 'models/'),
         # 字体文件  
         ('fonts/', 'fonts/'),
-        # 资源文件
-        ('assets/', 'assets/'),
+        # 渲染器文件  
+        ('pdfjs', '.'),
     ],
     hiddenimports=[
         # pdf2zh相关

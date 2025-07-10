@@ -6,7 +6,7 @@ if exist dist rmdir /s /q dist
 if exist build rmdir /s /q build
 
 REM 使用PyInstaller打包
-pyinstaller build_exe.spec
+pyinstaller build.spec
 
 REM 检查打包是否成功
 if exist dist\FreePDF\FreePDF.exe (
