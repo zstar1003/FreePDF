@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <img src="https://img.shields.io/badge/版本-3.0.0-blue" alt="版本">
+  <img src="https://img.shields.io/badge/版本-4.0.0-blue" alt="版本">
   <a href="LICENSE"><img src="https://img.shields.io/badge/许可证-AGPL3.0-green" alt="许可证"></a>
   <h4>
     <a href="README.md">🇨🇳 中文</a>
@@ -12,29 +12,47 @@
   </h4>
 </div>
 
-## 🌟 简介
+## ⭐️ 简介
 
 一个免费的PDF文献阅读器，支持将各语言的PDF文献转成中文，并支持接入大模型基于文献内容进行问答。
 
 
 ## 🏗️ 效果演示
 
-[![FreePDF：颠覆科研人的文献阅读方式](https://i0.hdslb.com/bfs/archive/43c920704c379c27424211f3edfc1657369dfd66.jpg@672w_378h_1c.avif)](https://www.bilibili.com/video/BV11EgkziEFg)
+[![FreePDF：颠覆科研人的文献阅读方式](https://i0.hdslb.com/bfs/archive/4a93b27eb529d8d4422fc6a8e43d3f081e851f05.jpg@672w_378h_1c.avif)](https://www.bilibili.com/video/BV11EgkziEFg)
 
 
 ## 📦 使用方式
 
-- windows 用户:
+- windows：
 
-  直接下载安装包：https://github.com/zstar1003/FreePDF/releases/download/v3.0.0/FreePDF_v3.0.0_Setup.exe
+  - github：https://github.com/zstar1003/FreePDF/releases/download/v4.0.0/FreePDF_v4.0.0_Setup.exe
 
-  备用链接：https://pan.baidu.com/s/1dmqg33WMgiFL62Ol7438zA?pwd=8888  (提取码: 8888)
+  - 百度网盘：https://pan.baidu.com/s/117EZ07PgPAqbxf9JejdMsQ?pwd=8888 提取码: 8888
 
-- 其它系统用户:
+- mac(arm64)：
 
-  未提供安装包，可安装相关环境，用 python 运行 `main.py`。
+  - github：https://github.com/zstar1003/FreePDF/releases/download/v4.0.0/FreePDF_v4.0.0_arm64.dmg
+
+  - 百度网盘：https://pan.baidu.com/s/1chdZc-JTXgrIOK4i4ZRRGg?pwd=8888 提取码: 8888 
 
 翻译完的PDF文件，会在其对应目录下生成 `-dual.pdf`(双语对照文件) 和 `-mono.pdf`(中文翻译文件)
+
+## 🔧 源码启动
+
+配置环境：
+
+```bash
+uv venv --python 3.12
+uv sync
+```
+
+启动应用：
+
+```bash
+python main.py
+```
+
 
 ## 📥 配置说明
 
@@ -58,9 +76,11 @@
 
 支持五种语言互相翻译：中文、英文、日文、韩文、繁体中文。
 
-问答引擎支持硅基流动(在线)和ollama(本地)。
+问答引擎支持硅基流动(在线)、ollama(本地)和其它符合`OpenAi API`的自定义方式。
 
-## 📮 常见问题
+
+
+## ❓ 常见问题
 
 1. 支持图片型PDF吗，比如扫描件？
 
