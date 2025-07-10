@@ -1,0 +1,51 @@
+name: macOS Build
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-12
+            arch: x86_64
+          - os: macos-14
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller==6.5.0
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller build_exe.spec --noconfirm
+
+      - name: Compress app
+        run: |
+          cd dist
+          zip -r FreePDF-${{ matrix.arch }}.zip FreePDF.app
+          cd ..
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FreePDF-mac-${{ matrix.arch }}
+          path: dist/FreePDF-${{ matrix.arch }}.zip
+          if-no-files-found: error 

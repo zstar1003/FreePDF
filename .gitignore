@@ -48,3 +48,5 @@ test-dual.pdf
 test-mono.pdf
 
 cache
+build
+dist
