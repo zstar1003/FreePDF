@@ -38,7 +38,13 @@ jobs:
       - name: Prepare bundle
         run: |
           mkdir -p package
-          mv dist/FreePDF.app package/
+          APP_PATH=$(find dist -maxdepth 2 -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ .app bundle not found under dist/"
+            exit 1
+          fi
+          echo "Found app $APP_PATH"
+          cp -R "$APP_PATH" package/
           cp -R fonts ui pdfjs models pdf2zh_config.json package/
 
       - name: Create DMG
