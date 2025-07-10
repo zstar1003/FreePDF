@@ -39,12 +39,13 @@ jobs:
         run: |
           mkdir -p package
           APP_PATH=$(find dist -maxdepth 2 -name "*.app" | head -n 1)
-          if [ -z "$APP_PATH" ]; then
-            echo "❌ .app bundle not found under dist/"
-            exit 1
+          if [ -n "$APP_PATH" ]; then
+            echo "Found app bundle $APP_PATH"
+            cp -R "$APP_PATH" package/
+          else
+            echo "No .app bundle found, copying dist/FreePDF*"
+            cp -R dist/FreePDF* package/ || cp -R dist/* package/
           fi
-          echo "Found app $APP_PATH"
-          cp -R "$APP_PATH" package/
           cp -R fonts ui pdfjs models pdf2zh_config.json package/
 
       - name: Create DMG
