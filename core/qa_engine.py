@@ -56,6 +56,8 @@ class QAEngineThread(QThread):
                 self._handle_silicon_qa()
             elif service == "ollama":
                 self._handle_ollama_qa()
+            elif service == "custom":
+                self._handle_custom_qa()
             else:
                 self.response_failed.emit("问答引擎未配置或已关闭")
                 return
@@ -176,6 +178,69 @@ class QAEngineThread(QThread):
         except Exception as e:
             self.response_failed.emit(f"Ollama问答处理失败: {str(e)}")
             
+    def _handle_custom_qa(self):
+        """处理自定义问答引擎"""
+        envs = self.config.get("envs", {})
+        api_url = envs.get("CUSTOM_API_URL")
+        api_key = envs.get("CUSTOM_API_KEY")  # 可选
+        model = envs.get("CUSTOM_MODEL")
+
+        if not api_url or not model:
+            self.response_failed.emit("自定义问答引擎配置不完整 (需要 CUSTOM_API_URL 和 CUSTOM_MODEL)")
+            return
+
+        # 构建消息
+        messages = self._build_messages()
+
+        # 调用自定义API
+        try:
+            headers = {
+                "Content-Type": "application/json"
+            }
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+
+            data = {
+                "model": model,
+                "messages": messages,
+                "stream": True,
+                "temperature": 0.7
+            }
+
+            response = requests.post(api_url, headers=headers, json=data, stream=True)
+            response.raise_for_status()
+
+            # 处理流式响应 (兼容OpenAI格式)
+            for line in response.iter_lines():
+                if self._stop_requested:
+                    break
+                
+                if line:
+                    line = line.decode('utf-8')
+                    if line.startswith('data: '):
+                        data_str = line[6:]
+                        if data_str.strip() == '[DONE]':
+                            break
+                        
+                        try:
+                            data_json = json.loads(data_str)
+                            if 'choices' in data_json and len(data_json['choices']) > 0:
+                                choice = data_json['choices'][0]
+                                if 'delta' in choice and 'content' in choice['delta']:
+                                    content = choice['delta']['content']
+                                    if content:
+                                        self.response_chunk.emit(content)
+                        except json.JSONDecodeError:
+                            continue
+            
+            if not self._stop_requested:
+                self.response_completed.emit()
+
+        except requests.exceptions.RequestException as e:
+            self.response_failed.emit(f"自定义问答API调用失败: {str(e)}")
+        except Exception as e:
+            self.response_failed.emit(f"自定义问答处理失败: {str(e)}")
+            
     def _build_messages(self) -> list:
         """构建对话消息"""
         messages = []
@@ -256,6 +321,8 @@ PDF文档内容如下：
             return envs.get("SILICON_MODEL", "deepseek-chat")
         elif service == "ollama":
             return envs.get("OLLAMA_MODEL", "llama2")
+        elif service == "custom":
+            return envs.get("CUSTOM_MODEL", "default")
         else:
             return "default"
 
