@@ -1602,6 +1602,28 @@ class EmbeddedQAWidget(QWidget):
         self.send_btn.clicked.connect(self.send_question)
         button_layout.addWidget(self.send_btn)
         
+        # 添加停止按钮
+        self._stop_qa_button = QPushButton("停止生成")
+        self._stop_qa_button.setFixedSize(80, 28)
+        self._stop_qa_button.setStyleSheet("""
+            QPushButton {
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+            }
+        """)
+        self._stop_qa_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._stop_qa_button.hide()
+        self._stop_qa_button.clicked.connect(self._on_stop_qa_clicked)
+        button_layout.addWidget(self._stop_qa_button)
+        
         input_layout.addLayout(button_layout)
         main_layout.addLayout(input_layout)
         
@@ -1654,6 +1676,20 @@ class EmbeddedQAWidget(QWidget):
         if hasattr(self, 'title_label'):
             self.title_label.hide()
 
+    def _reset_qa_buttons(self):
+        """恢复发送按钮，隐藏停止按钮"""
+        self.send_btn.show()
+        self._stop_qa_button.hide()
+
+    def _on_stop_qa_clicked(self):
+        """处理停止问答按钮点击事件"""
+        if self.qa_manager.is_qa_running():
+            self.qa_manager.stop_current_qa()
+            self._reset_qa_buttons()
+            self.add_message("系统", "已停止回答。")
+            self.status_label.setText("操作已停止")
+            self.current_response = ""
+
     def send_question(self):
         """发送问题"""
         question = self.question_input.toPlainText().strip()
@@ -1667,9 +1703,9 @@ class EmbeddedQAWidget(QWidget):
         self.add_message("用户", question)
         self.question_input.clear()
         
-        # 禁用发送按钮
-        self.send_btn.setEnabled(False)
-        self.send_btn.setText("思考中...")
+        # 隐藏发送按钮，显示停止按钮
+        self.send_btn.hide()
+        self._stop_qa_button.show()
         self.status_label.setText("正在生成回答...")
         
         # 调用AI问答功能
@@ -1842,9 +1878,8 @@ PDF文档内容如下：
         
         # 不需要额外的换行分隔
         
-        # 恢复发送按钮
-        self.send_btn.setEnabled(True)
-        self.send_btn.setText("发送")
+        # 恢复发送按钮，隐藏停止按钮
+        self._reset_qa_buttons()
         self.status_label.setText("回答完成")
         
         # 滚动到底部
@@ -1854,7 +1889,6 @@ PDF文档内容如下：
         """AI回答失败"""
         self.add_message("系统", f"回答失败: {error_message}")
         
-        # 恢复发送按钮
-        self.send_btn.setEnabled(True)
-        self.send_btn.setText("发送")
+        # 恢复发送按钮，隐藏停止按钮
+        self._reset_qa_buttons()
         self.status_label.setText(f"回答失败: {error_message}")
