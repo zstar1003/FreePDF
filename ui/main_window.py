@@ -103,6 +103,23 @@ class MainWindow(QMainWindow):
         """)
         toolbar_layout.addWidget(self.open_btn)
         
+        # 翻译配置按钮
+        self.translation_config_btn = QPushButton("翻译配置")
+        self.translation_config_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #fd7e14;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #e8681c;
+            }
+        """)
+        toolbar_layout.addWidget(self.translation_config_btn)
+        
         # 配置按钮
         self.config_btn = QPushButton("引擎配置")
         self.config_btn.setStyleSheet("""
@@ -336,6 +353,7 @@ class MainWindow(QMainWindow):
         """设置信号连接"""
         # 文件操作
         self.open_btn.clicked.connect(self.open_file)
+        self.translation_config_btn.clicked.connect(self.open_translation_config)
         self.config_btn.clicked.connect(self.open_config)
         self.about_btn.clicked.connect(self.show_about_dialog)
         self.qa_btn.clicked.connect(self.toggle_qa_widget)
@@ -454,6 +472,14 @@ class MainWindow(QMainWindow):
         
         if file_path:
             self.load_pdf_file(file_path)
+            
+    @pyqtSlot()
+    def open_translation_config(self):
+        """打开翻译配置对话框"""
+        from ui.translation_dialog import TranslationSettingsDialog
+        dialog = TranslationSettingsDialog(self)
+        if dialog.exec() == dialog.DialogCode.Accepted:
+            self.status_label.set_status("翻译配置已更新", "success")
             
     @pyqtSlot()
     def open_config(self):

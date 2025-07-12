@@ -37,6 +37,8 @@ ConfigManager.set("NOTO_FONT_PATH", font_path)
 envs = {}
 
 
+# 假设用户输入的页码（1基）
+user_pages = [11, 12, 13]
 params = {
     "model": model,
     "lang_in": "en",
@@ -44,7 +46,9 @@ params = {
     "service": "bing", 
     "thread": 4,
     "vfont": font_path,
-    "envs": envs
+    "envs": envs,
+    # 自动转换为0基页码
+    "pages": [p-1 for p in user_pages]
 }
 
 (file_mono, file_dual) = translate(files=["test.pdf"], **params)[0]

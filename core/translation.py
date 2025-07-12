@@ -32,9 +32,48 @@ class TranslationThread(QThread):
         self.lang_out = config.get('lang_out', lang_out)
         self.service = config.get('service', service)
         self.envs = config.get('envs', {})
+        self.pages = config.get('pages', '')  # 添加页面参数
+        self.max_pages = config.get('max_pages', 50)  # 添加最大页数参数
+        print(f"DEBUG: 加载的pages参数: '{self.pages}'")
         self.threads = threads
         self._stop_requested = False
         
+    def _parse_page_ranges(self, page_string):
+        """将页面范围字符串转换为整数数组（0-based索引）
+        支持格式: "1-5,8,10-15" -> [0,1,2,3,4,7,9,10,11,12,13,14]
+        用户输入的页码从1开始，但翻译接口需要从0开始的索引
+        """
+        if not page_string or not page_string.strip():
+            return None
+            
+        pages = []
+        try:
+            # 分割逗号分隔的部分
+            parts = page_string.strip().split(',')
+            for part in parts:
+                part = part.strip()
+                if '-' in part:
+                    # 处理范围，如 "1-5"
+                    start, end = part.split('-', 1)
+                    start = int(start.strip())
+                    end = int(end.strip())
+                    if start <= end and start >= 1:  # 确保页码从1开始
+                        # 转换为0-based索引
+                        pages.extend(range(start - 1, end))
+                else:
+                    # 处理单个页面
+                    page_num = int(part)
+                    if page_num >= 1:  # 确保页码从1开始
+                        pages.append(page_num - 1)  # 转换为0-based索引
+            
+            # 去重并排序
+            pages = sorted(list(set(pages)))
+            return pages
+            
+        except (ValueError, IndexError) as e:
+            print(f"页面范围解析错误: {e}")
+            return None
+
     def _load_translation_config(self):
         """加载翻译配置"""
         import json
@@ -43,7 +82,9 @@ class TranslationThread(QThread):
             "service": DEFAULT_SERVICE,
             "lang_in": DEFAULT_LANG_IN,
             "lang_out": DEFAULT_LANG_OUT,
-            "envs": {}
+            "envs": {},
+            "pages": "",  # 添加页面参数
+            "max_pages": 50  # 添加最大页数参数
         }
         
         try:
@@ -51,7 +92,22 @@ class TranslationThread(QThread):
                 with open(config_file, 'r', encoding='utf-8') as f:
                     full_config = json.load(f)
                     if "translation" in full_config:
-                        return full_config["translation"]
+                        config = full_config["translation"]
+                    else:
+                        # 如果没有translation节点，从根节点读取
+                        config = full_config
+                    
+                    # 合并配置，确保所有必要的键都存在
+                    result_config = default_config.copy()
+                    result_config.update(config)
+                    
+                    # 特别处理pages和translation_enabled参数，优先从根节点读取
+                    if "pages" in full_config:
+                        result_config["pages"] = full_config["pages"]
+                    if "translation_enabled" in full_config:
+                        result_config["translation_enabled"] = full_config["translation_enabled"]
+                    
+                    return result_config
         except Exception as e:
             print(f"读取翻译配置失败: {e}")
             
@@ -231,6 +287,17 @@ class TranslationThread(QThread):
                     "output": input_dir,  # 设置输出目录为输入文件所在目录
                     "envs": self.envs,  # 添加环境变量
                 }
+                
+                # 添加页面参数 - 转换页面范围字符串为整数数组
+                if self.pages:
+                    parsed_pages = self._parse_page_ranges(self.pages)
+                    if parsed_pages:
+                        params["pages"] = parsed_pages
+                        print(f"自定义翻译页面: {self.pages} -> {parsed_pages}")
+                    else:
+                        print(f"页面范围格式错误，将翻译所有页面: {self.pages}")
+                else:
+                    print("翻译所有页面")
                 
                 print(f"翻译参数: {params}")
                 print(f"翻译文件: {self.input_file}")
