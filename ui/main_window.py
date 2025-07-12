@@ -53,6 +53,7 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
         
         self.current_file = None
+        self._last_pdf_file = None  # 用于追踪PDF文件变化
         self.translation_manager = TranslationManager()
         self._is_syncing = False
         self._scroll_sync_enabled = True
@@ -551,18 +552,33 @@ class MainWindow(QMainWindow):
             self.embedded_qa.clear_chat() 
             self.embedded_qa.add_message("系统", "请先打开PDF文件，然后即可开始智能问答")
         else:
-            # 提取PDF文本内容（每次都重新提取以确保最新内容）
-            print("开始提取PDF文本内容...")
-            pdf_text = self._extract_pdf_text()
-            if not pdf_text:
-                self.embedded_qa.clear_chat()
-                self.embedded_qa.add_message("系统", "无法提取PDF文本内容，请检查PDF文件是否正常")
+            # 检查是否已经有PDF内容，避免重复提取和清空聊天记录
+            if not self.embedded_qa.pdf_content:
+                # 第一次加载PDF，需要提取文本内容
+                print("首次加载PDF，开始提取文本内容...")
+                pdf_text = self._extract_pdf_text()
+                if not pdf_text:
+                    self.embedded_qa.clear_chat()
+                    self.embedded_qa.add_message("系统", "无法提取PDF文本内容，请检查PDF文件是否正常")
+                else:
+                    print(f"PDF文本提取成功，长度: {len(pdf_text)} 字符")
+                    self.embedded_qa.set_pdf_content(pdf_text)
+                    # 只在首次加载时清空聊天记录并显示提示
+                    self.embedded_qa.clear_chat()
+                    self.embedded_qa.add_message("系统", f"PDF文档已加载完成（{len(pdf_text)}字符），现在可以开始智能问答了！")
             else:
-                print(f"PDF文本提取成功，长度: {len(pdf_text)} 字符")
-                self.embedded_qa.set_pdf_content(pdf_text)
-                # 如果成功加载了PDF内容，清空聊天记录并显示提示
-                self.embedded_qa.clear_chat()
-                self.embedded_qa.add_message("系统", f"PDF文档已加载完成（{len(pdf_text)}字符），现在可以开始智能问答了！")
+                # PDF内容已存在，不需要清空聊天记录，只需确保内容是最新的
+                print("PDF内容已存在，保持历史对话记录")
+                # 如果当前文件与之前不同，则重新提取（比如用户换了PDF文件）
+                if hasattr(self, '_last_pdf_file') and self._last_pdf_file != self.current_file:
+                    print("检测到PDF文件变化，重新提取文本内容...")
+                    pdf_text = self._extract_pdf_text()
+                    if pdf_text:
+                        self.embedded_qa.set_pdf_content(pdf_text)
+                        self.embedded_qa.add_message("系统", f"新PDF文档已加载（{len(pdf_text)}字符），可以继续问答")
+                        
+            # 记录当前PDF文件路径
+            self._last_pdf_file = self.current_file
         
     def _check_qa_engine_config(self):
         """检查问答引擎配置"""
@@ -712,9 +728,17 @@ class MainWindow(QMainWindow):
 
     def load_pdf_file(self, file_path):
         """加载PDF文件"""
+        # 检查是否是新的PDF文件
+        is_new_file = (self.current_file != file_path)
+        
         self.current_file = file_path
         self.left_pdf_widget.load_pdf(file_path)
         self.status_label.set_status(f"已加载: {os.path.basename(file_path)}", "success")
+
+        # 如果是新文件且智能问答面板存在内容，清空它以便重新加载
+        if is_new_file and hasattr(self.embedded_qa, 'pdf_content') and self.embedded_qa.pdf_content:
+            print("检测到新PDF文件，清空智能问答内容以便重新加载")
+            self.embedded_qa.pdf_content = None  # 清空PDF内容，但保留聊天记录
 
         # 如果智能问答面板可见，更新PDF内容
         if self.qa_panel_visible:
