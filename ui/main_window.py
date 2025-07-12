@@ -551,16 +551,18 @@ class MainWindow(QMainWindow):
             self.embedded_qa.clear_chat() 
             self.embedded_qa.add_message("系统", "请先打开PDF文件，然后即可开始智能问答")
         else:
-            # 提取PDF文本内容（仅在首次显示时）
-            if not self.embedded_qa.pdf_content:
-                pdf_text = self._extract_pdf_text()
-                if not pdf_text:
-                    self.embedded_qa.clear_chat()
-                    self.embedded_qa.add_message("系统", "无法提取PDF文本内容，请检查PDF文件是否正常")
-                else:
-                    self.embedded_qa.set_pdf_content(pdf_text)
-                    # 如果成功加载了PDF内容，只清空聊天记录，不显示提示
-                    self.embedded_qa.clear_chat()
+            # 提取PDF文本内容（每次都重新提取以确保最新内容）
+            print("开始提取PDF文本内容...")
+            pdf_text = self._extract_pdf_text()
+            if not pdf_text:
+                self.embedded_qa.clear_chat()
+                self.embedded_qa.add_message("系统", "无法提取PDF文本内容，请检查PDF文件是否正常")
+            else:
+                print(f"PDF文本提取成功，长度: {len(pdf_text)} 字符")
+                self.embedded_qa.set_pdf_content(pdf_text)
+                # 如果成功加载了PDF内容，清空聊天记录并显示提示
+                self.embedded_qa.clear_chat()
+                self.embedded_qa.add_message("系统", f"PDF文档已加载完成（{len(pdf_text)}字符），现在可以开始智能问答了！")
         
     def _check_qa_engine_config(self):
         """检查问答引擎配置"""
@@ -601,23 +603,111 @@ class MainWindow(QMainWindow):
             return ""
             
         try:
+            # 首先尝试使用pdfminer-six（项目中已安装）进行文本提取
+            try:
+                from pdfminer.high_level import extract_text
+                print("使用pdfminer-six提取PDF文本...")
+                full_text = extract_text(self.current_file)
+                if full_text and full_text.strip():
+                    # 按页面分割（这是个简化处理，pdfminer的完整文本）
+                    print(f"成功使用pdfminer-six提取PDF文本，总长度: {len(full_text)} 字符")
+                    return f"=== PDF文档内容 ===\n{full_text.strip()}"
+            except ImportError:
+                print("pdfminer-six导入失败，尝试其他方法")
+                
+            # 尝试使用pymupdf（项目中已安装）
+            try:
+                import fitz  # pymupdf
+                print("使用pymupdf(fitz)提取PDF文本...")
+                doc = fitz.open(self.current_file)
+                text_content = []
+                for page_num in range(len(doc)):
+                    page = doc.load_page(page_num)
+                    page_text = page.get_text()
+                    if page_text and page_text.strip():
+                        text_content.append(f"=== 第{page_num + 1}页 ===\n{page_text.strip()}")
+                doc.close()
+                        
+                if text_content:
+                    full_text = "\n\n".join(text_content)
+                    print(f"成功使用pymupdf提取PDF文本，总长度: {len(full_text)} 字符")
+                    return full_text
+            except ImportError:
+                print("pymupdf导入失败，尝试其他方法")
+                
+            # 尝试使用pdfplumber（如果用户安装了）
+            try:
+                import pdfplumber
+                print("使用pdfplumber提取PDF文本...")
+                text_content = []
+                with pdfplumber.open(self.current_file) as pdf:
+                    for page_num, page in enumerate(pdf.pages):
+                        try:
+                            page_text = page.extract_text()
+                            if page_text and page_text.strip():
+                                text_content.append(f"=== 第{page_num + 1}页 ===\n{page_text.strip()}")
+                        except Exception as e:
+                            print(f"提取第{page_num + 1}页文本失败: {e}")
+                            continue
+                            
+                if text_content:
+                    full_text = "\n\n".join(text_content)
+                    print(f"成功使用pdfplumber提取PDF文本，总长度: {len(full_text)} 字符")
+                    return full_text
+                    
+            except ImportError:
+                print("pdfplumber未安装")
+                
+            # 尝试使用PyPDF2（如果用户安装了）
+            try:
+                import PyPDF2
+                print("使用PyPDF2提取PDF文本...")
+                text_content = []
+                with open(self.current_file, 'rb') as file:
+                    pdf_reader = PyPDF2.PdfReader(file)
+                    for page_num, page in enumerate(pdf_reader.pages):
+                        try:
+                            page_text = page.extract_text()
+                            if page_text and page_text.strip():
+                                text_content.append(f"=== 第{page_num + 1}页 ===\n{page_text.strip()}")
+                        except Exception as e:
+                            print(f"提取第{page_num + 1}页文本失败: {e}")
+                            continue
+                            
+                if text_content:
+                    full_text = "\n\n".join(text_content)
+                    print(f"成功使用PyPDF2提取PDF文本，总长度: {len(full_text)} 字符")
+                    return full_text
+                    
+            except ImportError:
+                print("PyPDF2未安装")
+                
+            # 最后使用pikepdf作为备用方案
+            print("使用pikepdf作为备用方案...")
             import pikepdf
-            
             with pikepdf.open(self.current_file) as pdf:
                 text_content = []
                 for page_num, page in enumerate(pdf.pages):
                     try:
-                        # 尝试提取文本（pikepdf主要用于结构操作，文本提取有限）
-                        text_content.append(f"第{page_num + 1}页: PDF页面已加载")
-                    except Exception:
+                        # pikepdf主要用于结构操作，文本提取有限
+                        if '/Contents' in page:
+                            text_content.append(f"=== 第{page_num + 1}页 ===\n[PDF页面内容 - 文本提取功能有限，建议安装pdfminer-six、pymupdf、pdfplumber或PyPDF2]")
+                        else:
+                            text_content.append(f"=== 第{page_num + 1}页 ===\n[空白页面或无文本内容]")
+                    except Exception as e:
+                        print(f"处理第{page_num + 1}页失败: {e}")
                         continue
                         
-            full_text = "\n\n".join(text_content)
-            return full_text if text_content else "PDF已加载，但无法提取文本内容"
+            if text_content:
+                full_text = "\n\n".join(text_content)
+                print(f"使用pikepdf提取PDF结构信息，总长度: {len(full_text)} 字符")
+                return full_text + "\n\n注意：当前使用的是基础PDF结构提取。为获得完整文本内容，建议确保pdfminer-six或pymupdf库正常工作。"
+            else:
+                return "PDF文件已加载，但无法提取文本内容。建议检查PDF文件格式或安装更好的文本提取库。"
             
         except Exception as e:
             print(f"提取PDF文本失败: {e}")
-            return ""
+            return f"PDF文本提取失败: {str(e)}"
     
 
     def load_pdf_file(self, file_path):
@@ -625,6 +715,10 @@ class MainWindow(QMainWindow):
         self.current_file = file_path
         self.left_pdf_widget.load_pdf(file_path)
         self.status_label.set_status(f"已加载: {os.path.basename(file_path)}", "success")
+
+        # 如果智能问答面板可见，更新PDF内容
+        if self.qa_panel_visible:
+            self._update_qa_panel_status()
 
         # 读取配置判断是否启用翻译
         if not self._is_translation_enabled():
