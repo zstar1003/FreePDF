@@ -80,12 +80,11 @@ class TranslationThread(QThread):
                     print(f"PDF文件头无效: {header}")
                     return False
             
-            # 尝试使用fitz打开PDF
+            # 尝试使用pikepdf打开PDF
             try:
-                import fitz
-                doc = fitz.open(file_path)
-                page_count = doc.page_count
-                doc.close()
+                import pikepdf
+                with pikepdf.open(file_path) as pdf:
+                    page_count = len(pdf.pages)
                 
                 if page_count == 0:
                     print("PDF文件页数为0")
@@ -95,7 +94,7 @@ class TranslationThread(QThread):
                 return True
                 
             except Exception as e:
-                print(f"无法使用fitz打开PDF: {e}")
+                print(f"无法使用pikepdf打开PDF: {e}")
                 return False
                 
         except Exception as e:

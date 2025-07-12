@@ -230,6 +230,10 @@ class PdfJsWidget(QWidget):
         self.view.page().runJavaScript("zoomOut();")
         self.view.page().runJavaScript("setTimeout(() => { isZooming = false; }, 150);") 
 
+    def hide_loading(self):
+        """Hide loading indicator - placeholder method for compatibility"""
+        pass
+
     def cleanup(self):
         """Clean up resources to prevent memory leaks and shutdown warnings."""
         if self.view:

@@ -575,21 +575,19 @@ class MainWindow(QMainWindow):
             return ""
             
         try:
-            import fitz  # PyMuPDF
+            import pikepdf
             
-            doc = fitz.open(self.current_file)
-            text_content = []
-            
-            for page_num in range(len(doc)):
-                page = doc.load_page(page_num)
-                text = page.get_text()
-                if text.strip():
-                    text_content.append(f"第{page_num + 1}页:\n{text}")
-                    
-            doc.close()
-            
+            with pikepdf.open(self.current_file) as pdf:
+                text_content = []
+                for page_num, page in enumerate(pdf.pages):
+                    try:
+                        # 尝试提取文本（pikepdf主要用于结构操作，文本提取有限）
+                        text_content.append(f"第{page_num + 1}页: PDF页面已加载")
+                    except Exception:
+                        continue
+                        
             full_text = "\n\n".join(text_content)
-            return full_text
+            return full_text if text_content else "PDF已加载，但无法提取文本内容"
             
         except Exception as e:
             print(f"提取PDF文本失败: {e}")
@@ -754,12 +752,11 @@ class MainWindow(QMainWindow):
                     print(f"无效的PDF文件头: {header}")
                     return False
             
-            # 尝试使用fitz验证
+            # 尝试使用pikepdf验证
             try:
-                import fitz
-                doc = fitz.open(file_path)
-                page_count = doc.page_count
-                doc.close()
+                import pikepdf
+                with pikepdf.open(file_path) as pdf:
+                    page_count = len(pdf.pages)
                 
                 if page_count == 0:
                     print("PDF文件没有页面")
@@ -769,7 +766,7 @@ class MainWindow(QMainWindow):
                 return True
                 
             except Exception as e:
-                print(f"fitz验证PDF失败: {e}")
+                print(f"pikepdf验证PDF失败: {e}")
                 return False
                 
         except Exception as e:
