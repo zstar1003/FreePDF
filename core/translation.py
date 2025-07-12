@@ -14,6 +14,17 @@ from utils.constants import (
     DEFAULT_THREADS,
 )
 
+# 全局缓存，避免重复导入main模块
+_MAIN_MODULE = None
+
+def get_main_module():
+    """获取main模块，只导入一次"""
+    global _MAIN_MODULE
+    if _MAIN_MODULE is None:
+        import main
+        _MAIN_MODULE = main
+    return _MAIN_MODULE
+
 
 class TranslationThread(QThread):
     """PDF翻译线程"""
@@ -73,29 +84,19 @@ class TranslationThread(QThread):
                 print(f"PDF文件太小，可能无效: {file_size} bytes")
                 return False
             
-            # 尝试读取PDF文件头
-            with open(file_path, 'rb') as f:
-                header = f.read(8)
-                if not header.startswith(b'%PDF-'):
-                    print(f"PDF文件头无效: {header}")
-                    return False
-            
-            # 尝试使用fitz打开PDF
+            # 简单检查PDF文件头 - 不使用fitz
             try:
-                import fitz
-                doc = fitz.open(file_path)
-                page_count = doc.page_count
-                doc.close()
+                with open(file_path, 'rb') as f:
+                    header = f.read(8)
+                    if not header.startswith(b'%PDF-'):
+                        print(f"PDF文件头无效: {header}")
+                        return False
                 
-                if page_count == 0:
-                    print("PDF文件页数为0")
-                    return False
-                
-                print(f"PDF文件有效，共{page_count}页")
+                print(f"PDF文件有效，大小: {file_size} bytes")
                 return True
                 
             except Exception as e:
-                print(f"无法使用fitz打开PDF: {e}")
+                print(f"无法读取PDF文件: {e}")
                 return False
                 
         except Exception as e:
@@ -119,30 +120,52 @@ class TranslationThread(QThread):
 
             # 包装 stdout 以捕获 tqdm 等进度输出并通过 Qt 信号上报
             class _ProgressStdout:
-                """捕获 stdout 中的 "xx%" 字样并发射进度百分比"""
+                """捕获 stdout 中的进度信息并发射进度百分比"""
                 def __init__(self, delegate, emit_fn):
                     self._delegate = delegate
                     self._emit_fn = emit_fn
                     import re
-                    self._pattern = re.compile(r"(\d{1,3})%")
+                    # 支持多种进度格式: "xx%", "xx/100", "xxx/xxx"
+                    self._percent_pattern = re.compile(r"(\d{1,3})%")
+                    self._fraction_pattern = re.compile(r"(\d+)/(\d+)")
                     self._last_percent = -1
                 def write(self, s):
-                    # 原始写入
+                    # 原始写入并立即刷新
                     try:
                         self._delegate.write(s)
+                        self._delegate.flush()  # 立即刷新输出
                     except Exception:
                         pass
-                    # tqdm 会频繁使用回车覆盖行，可能一次 write 中含多个百分比；取最后一个
-                    matches = self._pattern.findall(s)
-                    if matches:
+                    
+                    # 先尝试匹配百分比格式
+                    percent_matches = self._percent_pattern.findall(s)
+                    if percent_matches:
                         try:
-                            percent = int(matches[-1])
-                            # 只在百分比变化时发信号，避免过度刷新
+                            percent = int(percent_matches[-1])
                             if percent != self._last_percent:
                                 self._last_percent = percent
                                 self._emit_fn(percent)
+                                # 处理Qt事件，确保信号立即发送
+                                from PyQt6.QtCore import QCoreApplication
+                                QCoreApplication.processEvents()
                         except Exception:
                             pass
+                    else:
+                        # 再尝试匹配分数格式
+                        fraction_matches = self._fraction_pattern.findall(s)
+                        if fraction_matches:
+                            try:
+                                current, total = map(int, fraction_matches[-1])
+                                if total > 0:
+                                    percent = int((current / total) * 100)
+                                    if percent != self._last_percent:
+                                        self._last_percent = percent
+                                        self._emit_fn(percent)
+                                        # 处理Qt事件，确保信号立即发送
+                                        from PyQt6.QtCore import QCoreApplication
+                                        QCoreApplication.processEvents()
+                            except Exception:
+                                pass
                 def flush(self):
                     try:
                         self._delegate.flush()
@@ -165,8 +188,8 @@ class TranslationThread(QThread):
                 return
             
             # 获取预加载的pdf2zh模块
-            from main import get_pdf2zh_modules
-            modules, config = get_pdf2zh_modules()
+            main_module = get_main_module()
+            modules, config = main_module.get_pdf2zh_modules()
             
             if modules is None or config is None:
                 self.translation_failed.emit("pdf2zh模块未正确预加载，请重启应用程序")
@@ -177,28 +200,7 @@ class TranslationThread(QThread):
             if self._stop_requested:
                 return
             
-            self.translation_progress.emit("正在加载AI模型...")
-            
-            try:
-                # 使用预加载的模块
-                translate = modules['translate']
-                OnnxModel = modules['OnnxModel']
-                
-                # 加载模型
-                model_path = config['models']['doclayout_path']
-                model = OnnxModel(model_path)
-                
-                if model is None:
-                    self.translation_failed.emit("无法加载AI模型，请检查模型文件")
-                    return
-                    
-                print("AI模型加载成功")
-                
-            except Exception as e:
-                error_msg = f"加载AI模型失败: {str(e)}\n{traceback.format_exc()}"
-                print(error_msg)
-                self.translation_failed.emit(error_msg)
-                return
+            self.translation_progress.emit("正在准备翻译...")
             
             if self._stop_requested:
                 return
@@ -206,64 +208,181 @@ class TranslationThread(QThread):
             self.translation_progress.emit("正在翻译PDF文档\n请稍候...")
             
             try:
-                # 获取输入文件所在目录作为输出目录
-                input_dir = os.path.dirname(os.path.abspath(self.input_file))
-                print(f"输出目录设置为: {input_dir}")
-                
-                # 设置翻译参数  
-                # 根据目标语言选择合适的字体
-                font_path = config['fonts'].get(self.lang_out, config['fonts'].get('default'))
-                # 处理字体路径，确保在Windows系统上不会产生正则表达式错误
-                if font_path:
-                    # 获取绝对路径并转换为正斜杠格式  
-                    font_path = os.path.abspath(font_path).replace('\\', '/')
-                    # 转义正则表达式特殊字符，防止被误解为正则表达式模式
-                    import re
-                    font_path = re.escape(font_path)
-                    print(f"目标语言: {self.lang_out}, 处理后的字体路径: {font_path}")
-                
-                params = {
-                    "model": model,
-                    "lang_in": self.lang_in,
-                    "lang_out": self.lang_out,
-                    "service": self.service,
-                    "thread": self.threads,
-                    "vfont": font_path,
-                    "output": input_dir,  # 设置输出目录为输入文件所在目录
-                    "envs": self.envs,  # 添加环境变量
-                }
-                
-                print(f"翻译参数: {params}")
-                print(f"翻译文件: {self.input_file}")
-                
-                # 执行翻译
-                result = translate(files=[self.input_file], **params)
-                print(f"翻译结果: {result}")
-                
-                if result and len(result) > 0:
-                    file_mono, file_dual = result[0]
-                    print(f"翻译输出文件: mono={file_mono}, dual={file_dual}")
+                try:
+                    # 使用新的API
+                    do_translate_file = modules['do_translate_file']
+                    SettingsModel = modules['SettingsModel']
+                    
+                    # 获取输入文件所在目录作为输出目录
+                    input_dir = os.path.dirname(os.path.abspath(self.input_file))
+                    print(f"输出目录设置为: {input_dir}")
+                    
+                    # 根据目标语言选择合适的字体
+                    font_path = config['fonts'].get(self.lang_out, config['fonts'].get('default'))
+                    if font_path:
+                        font_path = os.path.abspath(font_path)
+                        print(f"目标语言: {self.lang_out}, 字体路径: {font_path}")
+                    
+                    # 创建配置对象
+                    translate_engine_settings = config.get('translation', {})
+                    # 将服务名转换为正确的格式（首字母大写）
+                    service_name = translate_engine_settings.get('service', self.service)
+                    service_mapping = {
+                        'bing': 'Bing',
+                        'google': 'Google',
+                        'openai': 'OpenAI',
+                        'deepl': 'DeepL',
+                        'deepseek': 'DeepSeek',
+                        'ollama': 'Ollama',
+                        'xinference': 'Xinference',
+                        'azureopenai': 'AzureOpenAI',
+                        'modelscope': 'ModelScope',
+                        'zhipu': 'Zhipu',
+                        'siliconflow': 'SiliconFlow',
+                        'tencentmechinetranslation': 'TencentMechineTranslation',
+                        'gemini': 'Gemini',
+                        'azure': 'Azure',
+                        'anythingllm': 'AnythingLLM',
+                        'dify': 'Dify',
+                        'grok': 'Grok',
+                        'groq': 'Groq',
+                        'qwenmt': 'QwenMt',
+                        'openaicompatible': 'OpenAICompatible'
+                    }
+                    translate_engine_settings['translate_engine_type'] = service_mapping.get(service_name.lower(), 'Bing')
+                    
+                    settings = SettingsModel(
+                        layout_model_path=config['models']['doclayout_path'],
+                        lang_in=self.lang_in,
+                        lang_out=self.lang_out,
+                        service=self.service,
+                        thread_count=self.threads,
+                        font_path=font_path,
+                        output_dir=input_dir,
+                        envs=self.envs,
+                        translate_engine_settings=translate_engine_settings
+                    )
+                    
+                    print(f"翻译配置: {settings}")
+                    print(f"翻译文件: {self.input_file}")
+                    
+                    # 执行翻译 - 新API返回错误数量而非文件路径
+                    # 设置输入文件到settings中
+                    settings.basic.input_files = {self.input_file}
+                    error_count = do_translate_file(settings)
+                    print(f"翻译完成，错误数量: {error_count}")
+                    
+                    # 根据文件名推断输出文件路径 - 支持新的文件名格式
+                    base_name = os.path.splitext(os.path.basename(self.input_file))[0]
+                    
+                    # 语言代码映射
+                    lang_code_map = {
+                        "zh": "zh",
+                        "en": "en", 
+                        "ja": "ja",
+                        "ko": "ko",
+                        "zh-TW": "zh-TW"
+                    }
+                    
+                    # 获取目标语言代码
+                    lang_code = lang_code_map.get(self.lang_out, self.lang_out)
+                    
+                    # 尝试新格式: 原文件名.语言代码.mono.pdf / 原文件名.语言代码.dual.pdf
+                    file_mono_new = os.path.join(input_dir, f"{base_name}.{lang_code}.mono.pdf")
+                    file_dual_new = os.path.join(input_dir, f"{base_name}.{lang_code}.dual.pdf")
+                    
+                    # 兼容旧格式: 原文件名-mono.pdf / 原文件名-dual.pdf
+                    file_mono_old = os.path.join(input_dir, f"{base_name}-mono.pdf")
+                    file_dual_old = os.path.join(input_dir, f"{base_name}-dual.pdf")
+                    
+                    print(f"预期输出文件: ")
+                    print(f"  新格式mono: {file_mono_new}")
+                    print(f"  新格式dual: {file_dual_new}")
+                    print(f"  旧格式mono: {file_mono_old}")
+                    print(f"  旧格式dual: {file_dual_old}")
+                    
+                    # 检查文件是否生成成功
+                    result_found = False
                     
                     if self._stop_requested:
                         return
  
-                    # 检查文件是否存在和有效性
+                    # 检查文件是否存在和有效性 - 优先检查新格式
                     result_file = None
-                    if file_mono and os.path.exists(file_mono) and self._is_valid_pdf(file_mono):
-                        result_file = file_mono
-                        print(f"使用单语版本: {file_mono}")
-                    elif file_dual and os.path.exists(file_dual) and self._is_valid_pdf(file_dual):
-                        result_file = file_dual
-                        print(f"使用双语版本: {file_dual}")
                     
-                    if result_file:
-                        self.translation_completed.emit(os.path.abspath(result_file))
+                    # 详细检查每个可能的文件
+                    print("开始检查生成的PDF文件...")
+                    
+                    # 先检查新格式文件
+                    print(f"检查新格式mono文件: {file_mono_new}")
+                    if os.path.exists(file_mono_new):
+                        print(f"  文件存在，大小: {os.path.getsize(file_mono_new)} bytes")
+                        if self._is_valid_pdf(file_mono_new):
+                            result_file = file_mono_new
+                            result_found = True
+                            print(f"使用新格式单语版本: {file_mono_new}")
+                        else:
+                            print(f"  文件无效")
                     else:
-                        error_msg = "翻译完成但生成的PDF文件无效或无法找到"
+                        print(f"  文件不存在")
+                    
+                    if not result_found:
+                        print(f"检查新格式dual文件: {file_dual_new}")
+                        if os.path.exists(file_dual_new):
+                            print(f"  文件存在，大小: {os.path.getsize(file_dual_new)} bytes")
+                            if self._is_valid_pdf(file_dual_new):
+                                result_file = file_dual_new
+                                result_found = True
+                                print(f"使用新格式双语版本: {file_dual_new}")
+                            else:
+                                print(f"  文件无效")
+                        else:
+                            print(f"  文件不存在")
+                    
+                    # 再检查旧格式文件作为兼容
+                    if not result_found:
+                        print(f"检查旧格式mono文件: {file_mono_old}")
+                        if os.path.exists(file_mono_old):
+                            print(f"  文件存在，大小: {os.path.getsize(file_mono_old)} bytes")
+                            if self._is_valid_pdf(file_mono_old):
+                                result_file = file_mono_old
+                                result_found = True
+                                print(f"使用旧格式单语版本: {file_mono_old}")
+                            else:
+                                print(f"  文件无效")
+                        else:
+                            print(f"  文件不存在")
+                    
+                    if not result_found:
+                        print(f"检查旧格式dual文件: {file_dual_old}")
+                        if os.path.exists(file_dual_old):
+                            print(f"  文件存在，大小: {os.path.getsize(file_dual_old)} bytes")
+                            if self._is_valid_pdf(file_dual_old):
+                                result_file = file_dual_old
+                                result_found = True
+                                print(f"使用旧格式双语版本: {file_dual_old}")
+                            else:
+                                print(f"  文件无效")
+                        else:
+                            print(f"  文件不存在")
+                    
+                    if result_found and result_file:
+                        self.translation_completed.emit(os.path.abspath(result_file))
+                    elif error_count == 0:
+                        # 翻译成功但找不到输出文件，可能是文件名格式变化
+                        error_msg = "翻译完成但生成的PDF文件无法找到，请检查输出目录"
                         print(error_msg)
                         self.translation_failed.emit(error_msg)
-                else:
-                    self.translation_failed.emit("翻译结果为空")
+                    else:
+                        error_msg = f"翻译过程中发生 {error_count} 个错误"
+                        print(error_msg)
+                        self.translation_failed.emit(error_msg)
+                        
+                except Exception as api_error:
+                    error_msg = f"调用新API失败: {str(api_error)}\n{traceback.format_exc()}"
+                    print(error_msg)
+                    self.translation_failed.emit(error_msg)
+                    return
                     
             except Exception as e:
                 error_msg = f"翻译过程中出错: {str(e)}\n{traceback.format_exc()}"

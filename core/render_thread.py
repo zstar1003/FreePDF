@@ -1,6 +1,10 @@
 """PDF页面渲染线程"""
 
-import fitz
+try:
+    import fitz
+except ImportError:
+    print("警告: PyMuPDF (fitz) 未安装，PDF 渲染功能不可用")
+    fitz = None
 from PyQt6.QtCore import QMutex, QMutexLocker, Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
 

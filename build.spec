@@ -123,47 +123,9 @@ a = Analysis(
         ('pdfjs', '.'),
     ],
     hiddenimports=[
-        # pdf2zh相关
-        'pdf2zh',
-        'pdf2zh.translate',
-        'pdf2zh.config',
-        'pdf2zh.doclayout',
-        
-        # PyQt6相关
-        'PyQt6.QtWebEngineWidgets',
-        'PyQt6.QtWebEngineCore', 
-        'PyQt6.QtWebChannel',
-        'PyQt6.QtCore',
-        'PyQt6.QtGui',
-        'PyQt6.QtWidgets',
-        
-        # onnxruntime相关 - 添加更多隐式导入
-        'onnxruntime',
-        'onnxruntime.capi',
-        'onnxruntime.capi.onnxruntime_pybind11_state',
-        'onnxruntime.capi._pybind_state',
-        'onnxruntime.backend',
-        'onnxruntime.backend.backend',
-        'onnxruntime.backend.backend_rep',
-        'onnxruntime.capi.onnxruntime_validation',
-        
-        # 其他依赖
-        'fitz',
-        'PyMuPDF',
-        'PIL',
-        'PIL.Image',
-        'numpy',
-        'cv2',
-        'requests',
-        'urllib3',
-        'googletrans',
-        
-        # 多进程支持
-        'multiprocessing',
-        'multiprocessing.pool',
-        'multiprocessing.queues',
-        'multiprocessing.context',
-        'multiprocessing.spawn',
+        'pdf2zh_next',
+        'pdf2zh_next.translate',
+        'pdf2zh_next.config',
     ],
     hookspath=[],
     hooksconfig={},

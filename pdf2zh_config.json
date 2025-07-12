@@ -1,13 +1,13 @@
 {
     "models": {
-        "doclayout_path": "./models/doclayout_yolo_docstructbench_imgsz1024.onnx"
+        "doclayout_path": "D:\\Code\\FreePDF\\models\\doclayout_yolo_docstructbench_imgsz1024.onnx"
     },
     "fonts": {
-        "zh": "./fonts/SourceHanSerifCN-Regular.ttf",
-        "ja": "./fonts/SourceHanSerifJP-Regular.ttf",
-        "ko": "./fonts/SourceHanSerifKR-Regular.ttf",
-        "zh-TW": "./fonts/SourceHanSerifTW-Regular.ttf",
-        "default": "./fonts/GoNotoKurrent-Regular.ttf"
+        "zh": "D:\\Code\\FreePDF\\fonts\\SourceHanSerifCN-Regular.ttf",
+        "ja": "D:\\Code\\FreePDF\\fonts\\SourceHanSerifJP-Regular.ttf",
+        "ko": "D:\\Code\\FreePDF\\fonts\\SourceHanSerifKR-Regular.ttf",
+        "zh-TW": "D:\\Code\\FreePDF\\fonts\\SourceHanSerifTW-Regular.ttf",
+        "default": "D:\\Code\\FreePDF\\fonts\\GoNotoKurrent-Regular.ttf"
     },
     "translation": {
         "service": "bing",

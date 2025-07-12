@@ -102,25 +102,20 @@ def _load_pdf2zh_modules():
             # 继续尝试导入pdf2zh，也许不需要onnxruntime
         
         try:
-            from pdf2zh import translate
-            print("  - translate 导入成功")
+            from pdf2zh_next.high_level import SettingsModel, do_translate_file
+            print("  - do_translate_file 导入成功")
+            print("  - SettingsModel 导入成功")
         except Exception as e:
-            print(f"  - translate 导入失败: {e}")
+            print(f"  - do_translate_file/SettingsModel 导入失败: {e}")
             raise
             
         try:
-            from pdf2zh.config import ConfigManager
+            from pdf2zh_next.config import ConfigManager
             print("  - ConfigManager 导入成功")
         except Exception as e:
             print(f"  - ConfigManager 导入失败: {e}")
             raise
             
-        try:
-            from pdf2zh.doclayout import OnnxModel
-            print("  - OnnxModel 导入成功")
-        except Exception as e:
-            print(f"  - OnnxModel 导入失败: {e}")
-            raise
         
         print("步骤3: 读取配置文件...")
         # 获取配置文件路径
@@ -192,23 +187,25 @@ def _load_pdf2zh_modules():
                 print(f"字体目录不存在: {font_dir}")
             raise FileNotFoundError(f"字体文件不存在: {font_path}")
         
-        print("步骤6: 应用配置...")
-        # 应用配置
+        print("步骤6: 更新配置文件...")
+        # 将修正后的配置写回配置文件
+        print(f"更新配置文件: {config_path}")
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=4)
+        
+        # ConfigManager 不支持动态设置配置，它从配置文件读取
+        print("配置文件已更新，ConfigManager 将从文件中读取配置")
         for key, value in config.items():
             if key not in ['models', 'fonts']:
-                ConfigManager.set(key, value)
-                print(f"设置配置: {key} = {value}")
-
-        # 设置字体
-        ConfigManager.set("NOTO_FONT_PATH", font_path)
-        print(f"设置字体路径: {font_path}")
+                print(f"配置项: {key} = {value}")
+        print(f"字体路径: {font_path}")
         
         print("步骤7: 保存到全局变量...")
         # 将预加载的模块和配置保存到全局变量
         _PDF2ZH_MODULES = {
-            'translate': translate,
-            'ConfigManager': ConfigManager,
-            'OnnxModel': OnnxModel
+            'do_translate_file': do_translate_file,
+            'SettingsModel': SettingsModel,
+            'ConfigManager': ConfigManager
         }
         _PDF2ZH_CONFIG = config
         _PDF2ZH_LOADED = True

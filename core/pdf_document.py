@@ -2,7 +2,11 @@
 
 from collections import OrderedDict
 
-import fitz
+try:
+    import fitz
+except ImportError:
+    print("警告: PyMuPDF (fitz) 未安装，PDF 相关功能可能受限")
+    fitz = None
 
 from utils.constants import MAX_CACHE_SIZE
 

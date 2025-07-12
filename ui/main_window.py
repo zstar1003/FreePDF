@@ -683,7 +683,12 @@ class MainWindow(QMainWindow):
 
     def hide_loading(self):
         """隐藏加载动画"""
-        self.right_pdf_widget.hide_loading()
+        if hasattr(self.right_pdf_widget, 'hide_loading'):
+            self.right_pdf_widget.hide_loading()
+        else:
+            # PdfJsWidget 没有 hide_loading 方法，使用其他方式
+            # 可以考虑隐藏加载组件或切换到PDF显示状态
+            pass
 
     def start_translation(self, file_path):
         """开始翻译PDF"""

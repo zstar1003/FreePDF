@@ -46,7 +46,10 @@ nltk_data/
 
 test-dual.pdf
 test-mono.pdf
+test.zh.dual.pdf
+test.zh.mono.pdf
 
 cache
 build
 dist
+.claude
