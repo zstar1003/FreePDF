@@ -157,6 +157,24 @@ class MainWindow(QMainWindow):
         
         toolbar_layout.addStretch()
         
+        # 批量翻译按钮
+        self.batch_translate_btn = QPushButton("批量翻译")
+        self.batch_translate_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ff8c00;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #e07b00;
+            }
+        """)
+        self.batch_translate_btn.clicked.connect(self.open_batch_translate)
+        toolbar_layout.addWidget(self.batch_translate_btn)
+        
         # 关于软件按钮
         self.about_btn = QPushButton("关于软件")
         self.about_btn.setStyleSheet("""
@@ -494,6 +512,13 @@ class MainWindow(QMainWindow):
     def show_about_dialog(self):
         """显示关于软件对话框"""
         dialog = AboutDialog(self)
+        dialog.exec()
+        
+    @pyqtSlot()
+    def open_batch_translate(self):
+        """打开批量翻译对话框"""
+        from ui.batch_translation_dialog import BatchTranslationDialog
+        dialog = BatchTranslationDialog(self)
         dialog.exec()
             
     @pyqtSlot()
