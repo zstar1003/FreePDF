@@ -148,7 +148,7 @@ a = Analysis(
         'onnxruntime.capi.onnxruntime_validation',
         
         # 其他依赖
-        'fitz',
+        'pymupdf ',
         'PyMuPDF',
         'PIL',
         'PIL.Image',

@@ -1350,9 +1350,16 @@ class QADialog(QDialog):
             from core.qa_engine import QAEngineThread
             from utils.text_processor import text_processor
             
-            # 创建临时QA线程来获取模型信息
+            # 创建临时QA线程来获取模型信息和处理页面过滤
             temp_thread = QAEngineThread(question, self.pdf_content, self.chat_history)
             model_name = temp_thread._get_current_model()
+            
+            # 获取QA设置中的页面配置
+            qa_settings = temp_thread.config.get("qa_settings", {})
+            pages_config = qa_settings.get("pages", "").strip()
+            
+            # 应用页面过滤，获取实际会被处理的内容
+            processed_pdf_content = temp_thread._process_pdf_content_by_pages(self.pdf_content, pages_config)
             
             # 计算可用token
             system_prompt_template = """你是一个专业的PDF文档分析助手。用户上传了一个PDF文档，你需要基于文档内容回答用户的问题。
@@ -1373,17 +1380,23 @@ PDF文档内容如下：
                 max_response_tokens=2000
             )
             
-            # 检查是否需要截断并显示相应提示
-            original_tokens = text_processor.count_tokens(self.pdf_content)
+            # 检查是否需要截断并显示相应提示（使用过滤后的内容）
+            original_tokens = text_processor.count_tokens(processed_pdf_content)
             model_limit = text_processor.get_model_token_limit(model_name)
+            
+            # 构建提示信息
+            if pages_config:
+                page_info = f"（已按配置过滤到第{pages_config}页）"
+            else:
+                page_info = "（完整文档）"
             
             if original_tokens > available_tokens:
                 # 显示截断提示
-                truncation_msg = f"💡 提示：PDF内容较长({original_tokens:,} tokens)，已智能截断至{available_tokens:,} tokens以适应{model_name}模型({model_limit:,} tokens限制)。AI将基于最相关的内容回答您的问题。"
+                truncation_msg = f"💡 提示：PDF内容{page_info}较长({original_tokens:,} tokens)，已智能截断至{available_tokens:,} tokens以适应{model_name}模型({model_limit:,} tokens限制)。AI将基于最相关的内容回答您的问题。"
                 self.add_message("系统", truncation_msg)
             else:
                 # 显示未截断提示
-                normal_msg = f"📄 提示：PDF内容({original_tokens:,} tokens)在{model_name}模型限制范围内({model_limit:,} tokens)，AI将基于完整文档内容回答您的问题。"
+                normal_msg = f"📄 提示：PDF内容{page_info}({original_tokens:,} tokens)在{model_name}模型限制范围内({model_limit:,} tokens)，AI将基于完整内容回答您的问题。"
                 self.add_message("系统", normal_msg)
                 
         except Exception as e:
@@ -1604,7 +1617,29 @@ class EmbeddedQAWidget(QWidget):
         # 按钮布局
         button_layout = QHBoxLayout()
         
-        # 清空对话按钮
+        # QA配置按钮（放在原来清空按钮的位置）
+        config_btn = QPushButton("配置")
+        config_btn.setFixedSize(50, 28)
+        config_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                border: none;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+        """)
+        config_btn.clicked.connect(self.open_qa_settings)
+        button_layout.addWidget(config_btn)
+        
+        button_layout.addStretch()
+        
+        # 清空对话按钮（移到发送按钮左边）
         clear_btn = QPushButton("清空")
         clear_btn.setFixedSize(50, 28)
         clear_btn.setStyleSheet("""
@@ -1624,7 +1659,8 @@ class EmbeddedQAWidget(QWidget):
         clear_btn.clicked.connect(self.clear_chat)
         button_layout.addWidget(clear_btn)
         
-        button_layout.addStretch()
+        # 添加小间距
+        button_layout.addSpacing(5)
         
         # 发送按钮
         self.send_btn = QPushButton("发送")
@@ -1705,6 +1741,13 @@ class EmbeddedQAWidget(QWidget):
 """
         self.chat_display.setPlainText(welcome_msg)
         self.status_label.setText("对话已清空")
+        
+    def open_qa_settings(self):
+        """打开QA设置对话框"""
+        from ui.qa_settings_dialog import QASettingsDialog
+        dialog = QASettingsDialog(self)
+        if dialog.exec() == dialog.DialogCode.Accepted:
+            self.status_label.setText("QA配置已更新")
         
     def show_widget(self):
         """显示组件"""
@@ -1848,9 +1891,16 @@ class EmbeddedQAWidget(QWidget):
             from core.qa_engine import QAEngineThread
             from utils.text_processor import text_processor
             
-            # 创建临时QA线程来获取模型信息
+            # 创建临时QA线程来获取模型信息和处理页面过滤
             temp_thread = QAEngineThread(question, self.pdf_content, self.chat_history)
             model_name = temp_thread._get_current_model()
+            
+            # 获取QA设置中的页面配置
+            qa_settings = temp_thread.config.get("qa_settings", {})
+            pages_config = qa_settings.get("pages", "").strip()
+            
+            # 应用页面过滤，获取实际会被处理的内容
+            processed_pdf_content = temp_thread._process_pdf_content_by_pages(self.pdf_content, pages_config)
             
             # 计算可用token
             system_prompt_template = """你是一个专业的PDF文档分析助手。用户上传了一个PDF文档，你需要基于文档内容回答用户的问题。
@@ -1871,17 +1921,23 @@ PDF文档内容如下：
                 max_response_tokens=2000
             )
             
-            # 检查是否需要截断并显示相应提示
-            original_tokens = text_processor.count_tokens(self.pdf_content)
+            # 检查是否需要截断并显示相应提示（使用过滤后的内容）
+            original_tokens = text_processor.count_tokens(processed_pdf_content)
             model_limit = text_processor.get_model_token_limit(model_name)
+            
+            # 构建提示信息
+            if pages_config:
+                page_info = f"（已按配置过滤到第{pages_config}页）"
+            else:
+                page_info = "（完整文档）"
             
             if original_tokens > available_tokens:
                 # 显示截断提示
-                truncation_msg = f"💡 提示：PDF内容较长({original_tokens:,} tokens)，已智能截断至{available_tokens:,} tokens以适应{model_name}模型({model_limit:,} tokens限制)。AI将基于最相关的内容回答您的问题。"
+                truncation_msg = f"💡 提示：PDF内容{page_info}较长({original_tokens:,} tokens)，已智能截断至{available_tokens:,} tokens以适应{model_name}模型({model_limit:,} tokens限制)。AI将基于最相关的内容回答您的问题。"
                 self.add_message("系统", truncation_msg)
             else:
                 # 显示未截断提示
-                normal_msg = f"📄 提示：PDF内容({original_tokens:,} tokens)在{model_name}模型限制范围内({model_limit:,} tokens)，AI将基于完整文档内容回答您的问题。"
+                normal_msg = f"📄 提示：PDF内容{page_info}({original_tokens:,} tokens)在{model_name}模型限制范围内({model_limit:,} tokens)，AI将基于完整内容回答您的问题。"
                 self.add_message("系统", normal_msg)
                 
         except Exception as e:

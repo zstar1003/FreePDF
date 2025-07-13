@@ -2,7 +2,7 @@
 
 from collections import OrderedDict
 
-import fitz
+import pymupdf
 
 from utils.constants import MAX_CACHE_SIZE
 
@@ -21,7 +21,7 @@ class PDFDocument:
             if self.doc:
                 self.doc.close()
                 
-            self.doc = fitz.open(file_path)
+            self.doc = pymupdf .open(file_path)
             self.file_path = file_path
             self.total_pages = len(self.doc)
             return True, "加载成功"

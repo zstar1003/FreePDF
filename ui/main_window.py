@@ -614,42 +614,65 @@ class MainWindow(QMainWindow):
             return False
             
     def _extract_pdf_text(self):
-        """提取PDF文本内容"""
+        """提取PDF文本内容 - 优先使用支持页面分割的方法"""
         if not self.current_file:
             return ""
             
         try:
-            # 首先尝试使用pdfminer-six（项目中已安装）进行文本提取
+            # 首先检查PDF的实际页数
+            actual_page_count = 0
             try:
-                from pdfminer.high_level import extract_text
-                print("使用pdfminer-six提取PDF文本...")
-                full_text = extract_text(self.current_file)
-                if full_text and full_text.strip():
-                    # 按页面分割（这是个简化处理，pdfminer的完整文本）
-                    print(f"成功使用pdfminer-six提取PDF文本，总长度: {len(full_text)} 字符")
-                    return f"=== PDF文档内容 ===\n{full_text.strip()}"
-            except ImportError:
-                print("pdfminer-six导入失败，尝试其他方法")
+                import pikepdf
+                with pikepdf.open(self.current_file) as pdf:
+                    actual_page_count = len(pdf.pages)
+                print(f"PDF实际页数: {actual_page_count}")
+            except Exception as e:
+                print(f"无法获取PDF页数: {e}")
                 
-            # 尝试使用pymupdf（项目中已安装）
+            # 优先尝试使用pymupdf（项目中已安装且支持页面分割）
             try:
-                import fitz  # pymupdf
-                print("使用pymupdf(fitz)提取PDF文本...")
-                doc = fitz.open(self.current_file)
+                import pymupdf   # pymupdf
+                print("使用pymupdf(pymupdf )提取PDF文本...")
+                doc = pymupdf .open(self.current_file)
+                pdf_page_count = len(doc)
+                print(f"pymupdf检测到的页数: {pdf_page_count}")
+                
                 text_content = []
-                for page_num in range(len(doc)):
+                for page_num in range(pdf_page_count):
                     page = doc.load_page(page_num)
                     page_text = page.get_text()
+                    
+                    # 检查文本质量 - 如果包含过多单字符或乱码，认为提取失败
                     if page_text and page_text.strip():
-                        text_content.append(f"=== 第{page_num + 1}页 ===\n{page_text.strip()}")
+                        # 简单的文本质量检查
+                        words = page_text.split()
+                        single_chars = sum(1 for word in words if len(word.strip()) == 1)
+                        total_words = len(words)
+                        
+                        if total_words > 0 and (single_chars / total_words) > 0.7:
+                            print(f"第{page_num + 1}页文本质量较差，可能是乱码")
+                            text_content.append(f"=== 第{page_num + 1}页 ===\n[页面文本质量较差，可能需要使用其他提取方法]")
+                        else:
+                            text_content.append(f"=== 第{page_num + 1}页 ===\n{page_text.strip()}")
+                    else:
+                        # 即使页面为空，也添加页面标记
+                        text_content.append(f"=== 第{page_num + 1}页 ===\n[页面内容为空或无法提取]")
+                
                 doc.close()
                         
-                if text_content:
+                if text_content and len(text_content) == pdf_page_count:
                     full_text = "\n\n".join(text_content)
-                    print(f"成功使用pymupdf提取PDF文本，总长度: {len(full_text)} 字符")
+                    print(f"成功使用pymupdf提取PDF文本，总长度: {len(full_text)} 字符，共{len(text_content)}页")
                     return full_text
-            except ImportError:
-                print("pymupdf导入失败，尝试其他方法")
+                else:
+                    print(f"pymupdf页面数量不匹配，期望{pdf_page_count}页，实际提取{len(text_content)}页")
+                    
+            except ImportError as e:
+                print(f"pymupdf导入失败: {str(e)}")
+                print("尝试其他方法")
+            except Exception as e:
+                print(f"pymupdf处理失败: {str(e)}")
+                print("尝试其他方法")
                 
             # 尝试使用pdfplumber（如果用户安装了）
             try:
@@ -657,19 +680,32 @@ class MainWindow(QMainWindow):
                 print("使用pdfplumber提取PDF文本...")
                 text_content = []
                 with pdfplumber.open(self.current_file) as pdf:
+                    pdf_page_count = len(pdf.pages)
+                    print(f"pdfplumber检测到的页数: {pdf_page_count}")
+                    
+                    # 验证页数是否合理
+                    if actual_page_count > 0 and pdf_page_count != actual_page_count:
+                        print(f"页数不匹配：实际{actual_page_count}页，pdfplumber检测到{pdf_page_count}页")
+                    
                     for page_num, page in enumerate(pdf.pages):
                         try:
                             page_text = page.extract_text()
                             if page_text and page_text.strip():
                                 text_content.append(f"=== 第{page_num + 1}页 ===\n{page_text.strip()}")
+                            else:
+                                # 即使页面为空，也添加页面标记
+                                text_content.append(f"=== 第{page_num + 1}页 ===\n[页面内容为空或无法提取]")
                         except Exception as e:
                             print(f"提取第{page_num + 1}页文本失败: {e}")
+                            text_content.append(f"=== 第{page_num + 1}页 ===\n[页面文本提取失败]")
                             continue
                             
-                if text_content:
+                if text_content and len(text_content) == pdf_page_count:
                     full_text = "\n\n".join(text_content)
-                    print(f"成功使用pdfplumber提取PDF文本，总长度: {len(full_text)} 字符")
+                    print(f"成功使用pdfplumber提取PDF文本，总长度: {len(full_text)} 字符，共{len(text_content)}页")
                     return full_text
+                else:
+                    print(f"pdfplumber页面数量不匹配，期望{pdf_page_count}页，实际提取{len(text_content)}页")
                     
             except ImportError:
                 print("pdfplumber未安装")
@@ -681,27 +717,140 @@ class MainWindow(QMainWindow):
                 text_content = []
                 with open(self.current_file, 'rb') as file:
                     pdf_reader = PyPDF2.PdfReader(file)
+                    pdf_page_count = len(pdf_reader.pages)
+                    print(f"PyPDF2检测到的页数: {pdf_page_count}")
+                    
+                    # 验证页数是否合理
+                    if actual_page_count > 0 and pdf_page_count != actual_page_count:
+                        print(f"页数不匹配：实际{actual_page_count}页，PyPDF2检测到{pdf_page_count}页")
+                    
                     for page_num, page in enumerate(pdf_reader.pages):
                         try:
                             page_text = page.extract_text()
                             if page_text and page_text.strip():
                                 text_content.append(f"=== 第{page_num + 1}页 ===\n{page_text.strip()}")
+                            else:
+                                # 即使页面为空，也添加页面标记
+                                text_content.append(f"=== 第{page_num + 1}页 ===\n[页面内容为空或无法提取]")
                         except Exception as e:
                             print(f"提取第{page_num + 1}页文本失败: {e}")
+                            text_content.append(f"=== 第{page_num + 1}页 ===\n[页面文本提取失败]")
                             continue
                             
-                if text_content:
+                if text_content and len(text_content) == pdf_page_count:
                     full_text = "\n\n".join(text_content)
-                    print(f"成功使用PyPDF2提取PDF文本，总长度: {len(full_text)} 字符")
+                    print(f"成功使用PyPDF2提取PDF文本，总长度: {len(full_text)} 字符，共{len(text_content)}页")
                     return full_text
+                else:
+                    print(f"PyPDF2页面数量不匹配，期望{pdf_page_count}页，实际提取{len(text_content)}页")
                     
             except ImportError:
                 print("PyPDF2未安装")
                 
-            # 最后使用pikepdf作为备用方案
-            print("使用pikepdf作为备用方案...")
+            # 使用pdfminer-six作为备用方案，增强页面分割功能
+            try:
+                from pdfminer.high_level import extract_text
+                from pdfminer.layout import LAParams
+                from pdfminer.high_level import extract_text_to_fp
+                from pdfminer.pdfpage import PDFPage
+                import io
+                
+                print("使用pdfminer-six提取PDF文本（备用方案）...")
+                
+                # 尝试按页面提取文本
+                try:
+                    text_content = []
+                    with open(self.current_file, 'rb') as fp:
+                        pages = list(PDFPage.get_pages(fp))
+                        page_count = len(pages)
+                        print(f"pdfminer-six检测到的页数: {page_count}")
+                        
+                        # 验证页数是否合理
+                        if actual_page_count > 0 and page_count != actual_page_count:
+                            print(f"页数不匹配：实际{actual_page_count}页，pdfminer-six检测到{page_count}页")
+                        
+                        # 按页面提取文本
+                        for page_num, page in enumerate(pages):
+                            try:
+                                # 重新打开文件并提取特定页面
+                                with open(self.current_file, 'rb') as fp2:
+                                    output_string = io.StringIO()
+                                    laparams = LAParams()
+                                    extract_text_to_fp(fp2, output_string, 
+                                                     page_numbers=[page_num], 
+                                                     laparams=laparams)
+                                    page_text = output_string.getvalue()
+                                    
+                                if page_text and page_text.strip():
+                                    text_content.append(f"=== 第{page_num + 1}页 ===\n{page_text.strip()}")
+                                else:
+                                    text_content.append(f"=== 第{page_num + 1}页 ===\n[页面内容为空或无法提取]")
+                                    
+                            except Exception as e:
+                                print(f"提取第{page_num + 1}页失败: {e}")
+                                text_content.append(f"=== 第{page_num + 1}页 ===\n[页面文本提取失败: {str(e)}]")
+                                
+                    if text_content and len(text_content) == page_count:
+                        full_text = "\n\n".join(text_content)
+                        print(f"成功使用pdfminer-six按页面提取PDF文本，总长度: {len(full_text)} 字符，共{len(text_content)}页")
+                        return full_text
+                    else:
+                        print(f"pdfminer-six页面提取不完整，回退到整体提取")
+                        
+                except Exception as e:
+                    print(f"pdfminer-six按页面提取失败: {e}，尝试整体提取")
+                
+                # 回退到整体文本提取
+                full_text = extract_text(self.current_file)
+                if full_text and full_text.strip():
+                    print(f"成功使用pdfminer-six提取PDF文本，总长度: {len(full_text)} 字符")
+                    
+                    # 尝试智能分页 - 基于常见的页面分隔符
+                    import re
+                    
+                    # 常见的页面分隔符模式
+                    page_break_patterns = [
+                        r'\n\s*\n\s*(?=\d+\s*\n)',  # 页码后的换行
+                        r'\n\s*\n\s*(?=Page\s+\d+)',  # "Page X"
+                        r'\n\s*\n\s*(?=第\s*\d+\s*页)',  # "第X页"
+                        r'\f',  # 换页符
+                    ]
+                    
+                    # 尝试不同的分页模式
+                    pages = None
+                    for pattern in page_break_patterns:
+                        try_pages = re.split(pattern, full_text)
+                        if len(try_pages) > 1:
+                            pages = try_pages
+                            print(f"使用模式 '{pattern}' 分割出 {len(pages)} 个部分")
+                            break
+                    
+                    if pages and len(pages) > 1:
+                        text_content = []
+                        for i, page_text in enumerate(pages):
+                            if page_text.strip():
+                                text_content.append(f"=== 第{i + 1}页 ===\n{page_text.strip()}")
+                        if text_content:
+                            final_text = "\n\n".join(text_content)
+                            print(f"智能分页成功，共{len(text_content)}页")
+                            return final_text
+                    
+                    # 如果无法分页，返回整个文档，但为页面过滤添加单页标记
+                    print("无法自动分页，返回整个文档")
+                    return f"=== 第1页 ===\n{full_text.strip()}\n\n注意：无法自动分页，所有内容作为第1页处理。"
+                    
+            except ImportError:
+                print("pdfminer-six导入失败")
+            except Exception as e:
+                print(f"pdfminer-six处理失败: {e}")
+                
+            # 最后使用pikepdf作为最后备用方案
+            print("使用pikepdf作为最后备用方案...")
             import pikepdf
             with pikepdf.open(self.current_file) as pdf:
+                pdf_page_count = len(pdf.pages)
+                print(f"pikepdf检测到的页数: {pdf_page_count}")
+                
                 text_content = []
                 for page_num, page in enumerate(pdf.pages):
                     try:
@@ -712,17 +861,23 @@ class MainWindow(QMainWindow):
                             text_content.append(f"=== 第{page_num + 1}页 ===\n[空白页面或无文本内容]")
                     except Exception as e:
                         print(f"处理第{page_num + 1}页失败: {e}")
+                        text_content.append(f"=== 第{page_num + 1}页 ===\n[页面处理失败]")
                         continue
                         
-            if text_content:
+            if text_content and len(text_content) == pdf_page_count:
                 full_text = "\n\n".join(text_content)
-                print(f"使用pikepdf提取PDF结构信息，总长度: {len(full_text)} 字符")
-                return full_text + "\n\n注意：当前使用的是基础PDF结构提取。为获得完整文本内容，建议确保pdfminer-six或pymupdf库正常工作。"
+                print(f"使用pikepdf提取PDF结构信息，总长度: {len(full_text)} 字符，共{len(text_content)}页")
+                return full_text
             else:
-                return "PDF文件已加载，但无法提取文本内容。建议检查PDF文件格式或安装更好的文本提取库。"
-            
+                print(f"pikepdf页面数量不匹配，期望{pdf_page_count}页，实际提取{len(text_content)}页")
+                if text_content:
+                    full_text = "\n\n".join(text_content)
+                    return full_text + "\n\n注意：当前使用的是基础PDF结构提取。为获得完整文本内容，建议确保pdfminer-six或pymupdf库正常工作。"
+                else:
+                    return "PDF文件已加载，但无法提取文本内容。建议检查PDF文件格式或安装更好的文本提取库。"
+                
         except Exception as e:
-            print(f"提取PDF文本失败: {e}")
+            print(f"PDF文本提取失败: {e}")
             return f"PDF文本提取失败: {str(e)}"
     
 

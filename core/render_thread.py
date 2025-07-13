@@ -1,6 +1,6 @@
 """PDF页面渲染线程"""
 
-import fitz
+import pymupdf 
 from PyQt6.QtCore import QMutex, QMutexLocker, Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
 
@@ -52,11 +52,11 @@ class PageRenderThread(QThread):
             render_dpi, render_scale = self._calculate_render_params(page)
             
             # 高质量渲染
-            mat = fitz.Matrix(render_scale, render_scale)
+            mat = pymupdf .Matrix(render_scale, render_scale)
             pix = page.get_pixmap(
                 matrix=mat, 
                 alpha=False,
-                colorspace=fitz.csRGB,  # 明确指定RGB色彩空间
+                colorspace=pymupdf .csRGB,  # 明确指定RGB色彩空间
                 annots=True,  # 包含注释
                 clip=None
             )
@@ -91,7 +91,7 @@ class PageRenderThread(QThread):
         try:
             # 使用较低的DPI快速渲染
             preview_scale = self.zoom_factor * (96 / 72.0)  # 96 DPI
-            mat = fitz.Matrix(preview_scale, preview_scale)
+            mat = pymupdf .Matrix(preview_scale, preview_scale)
             pix = page.get_pixmap(matrix=mat, alpha=False)
             
             if self._should_stop():

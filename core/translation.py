@@ -203,7 +203,8 @@ class TranslationThread(QThread):
                         pass
 
             # 将 sys.stdout / sys.stderr 再包装一层，用于进度捕获
-            progress_emit = lambda p: self.translation_progress.emit(f"PROGRESS:{p}")
+            def progress_emit(p):
+                return self.translation_progress.emit(f"PROGRESS:{p}")
             sys.stdout = _ProgressStdout(sys.stdout, progress_emit)
             sys.stderr = _ProgressStdout(sys.stderr, progress_emit)
             

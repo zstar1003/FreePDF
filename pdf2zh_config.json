@@ -19,6 +19,10 @@
         "service": "关闭",
         "envs": {}
     },
+    "qa_settings": {
+        "pages": "",
+        "system_prompt": "你是一个专业的PDF文档分析助手。用户上传了一个PDF文档，你需要基于文档内容回答用户的问题。\n\nPDF文档内容如下：\n{pdf_content}\n\n请注意：\n1. 请仅基于上述PDF文档内容回答问题\n2. 如果问题与文档内容无关，请明确说明\n3. 回答要准确、详细，并引用相关页面信息\n4. 使用中文回答\n5. 请使用纯文本回答，不要使用任何markdown格式（如 **、##、*、- 等符号），直接用文字表达重点"
+    },
     "translation_enabled": true,
     "NOTO_FONT_PATH": "./fonts/SourceHanSerifCN-Regular.ttf",
     "pages": ""
