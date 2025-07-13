@@ -33,7 +33,6 @@ class TranslationThread(QThread):
         self.service = config.get('service', service)
         self.envs = config.get('envs', {})
         self.pages = config.get('pages', '')  # 添加页面参数
-        self.max_pages = config.get('max_pages', 50)  # 添加最大页数参数
         print(f"DEBUG: 加载的pages参数: '{self.pages}'")
         self.threads = threads
         self._stop_requested = False
@@ -83,8 +82,7 @@ class TranslationThread(QThread):
             "lang_in": DEFAULT_LANG_IN,
             "lang_out": DEFAULT_LANG_OUT,
             "envs": {},
-            "pages": "",  # 添加页面参数
-            "max_pages": 50  # 添加最大页数参数
+            "pages": ""
         }
         
         try:

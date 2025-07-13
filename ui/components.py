@@ -640,7 +640,7 @@ class TranslationConfigDialog(QDialog):
         elif service == "ollama":
             # 创建Ollama问答配置控件
             self.qa_ollama_host = QLineEdit()
-            self.qa_ollama_host.setPlaceholderText("例如: http://127.0.0.1:11434/api/generate")
+            self.qa_ollama_host.setPlaceholderText("例如: http://127.0.0.1:11434")
             self.qa_ollama_model = QLineEdit()
             self.qa_ollama_model.setPlaceholderText("例如: deepseek-r1:1.5b")
             
@@ -669,7 +669,7 @@ class TranslationConfigDialog(QDialog):
         elif service == "自定义":
             # 自定义问答引擎
             self.custom_qa_host = QLineEdit()
-            self.custom_qa_host.setPlaceholderText("http://example.com/api")
+            self.custom_qa_host.setPlaceholderText("https://api.siliconflow.cn")
             self.custom_qa_key = QLineEdit()
             self.custom_qa_key.setPlaceholderText("可选: API Key")
             self.custom_qa_model = QLineEdit()
@@ -723,7 +723,7 @@ class TranslationConfigDialog(QDialog):
         elif service == "ollama":
             # 创建Ollama配置控件
             self.ollama_host = QLineEdit()
-            self.ollama_host.setPlaceholderText("例如: http://127.0.0.1:11434/api/generate")
+            self.ollama_host.setPlaceholderText("例如: http://127.0.0.1:11434")
             self.ollama_model = QLineEdit()
             self.ollama_model.setPlaceholderText("例如: deepseek-r1:1.5b")
             
@@ -965,6 +965,7 @@ class TranslationConfigDialog(QDialog):
         url = "" 
         headers = {}
         expect_model = None
+        
         if service == "自定义" and hasattr(self, 'custom_host'):
             url = self.custom_host.text().strip()
             expect_model = self.custom_model.text().strip() if hasattr(self,'custom_model') else None
@@ -972,7 +973,7 @@ class TranslationConfigDialog(QDialog):
             url = self.ollama_host.text().strip()
             expect_model = self.ollama_model.text().strip() if hasattr(self,'ollama_model') else None
         elif service == "silicon":
-            url = "https://api.siliconflow.cn/v1"
+            url = "https://api.siliconflow.cn"
             expect_model = self.silicon_model.text().strip() if hasattr(self,'silicon_model') else None
             if hasattr(self, 'silicon_api_key') and self.silicon_api_key.text().strip():
                 headers["Authorization"] = f"Bearer {self.silicon_api_key.text().strip()}"
@@ -980,6 +981,11 @@ class TranslationConfigDialog(QDialog):
             url = "https://www.bing.com/translator"
         elif service == "google":
             url = "https://translate.google.com/m"
+
+        # 检查需要模型的服务是否填写了模型
+        if service in ("silicon", "ollama") and not expect_model:
+            QMessageBox.warning(self, "测试连接", f"{service} 服务需要指定模型名称，请填写模型字段")
+            return
 
         if not url:
             QMessageBox.warning(self, "测试连接", "缺少可测试的 Host")
@@ -992,20 +998,30 @@ class TranslationConfigDialog(QDialog):
         url = "" 
         headers = {} 
         expect_model = None
+        
         if service == "自定义" and hasattr(self, 'custom_qa_host'):
             url = self.custom_qa_host.text().strip()
             expect_model = self.custom_qa_model.text().strip() if hasattr(self,'custom_qa_model') else None
+            if self.custom_qa_key.text().strip():
+                headers["Authorization"] = f"Bearer {self.custom_qa_key.text().strip()}"
         elif service == "ollama" and hasattr(self, 'qa_ollama_host'):
             url = self.qa_ollama_host.text().strip()
             expect_model = self.qa_ollama_model.text().strip() if hasattr(self,'qa_ollama_model') else None
         elif service == "silicon" and hasattr(self, 'qa_silicon_api_key'):
-            url = "https://api.siliconflow.cn/v1"
+            url = "https://api.siliconflow.cn"
             expect_model = self.qa_silicon_model.text().strip() if hasattr(self,'qa_silicon_model') else None
             if self.qa_silicon_api_key.text().strip():
                 headers["Authorization"] = f"Bearer {self.qa_silicon_api_key.text().strip()}"
+        
+        # 检查模型是否为空
+        if service in ("silicon", "ollama") and not expect_model:
+            QMessageBox.warning(self, "测试连接", f"{service} 服务需要指定模型名称，请填写模型字段")
+            return
+            
         if not url:
             QMessageBox.warning(self, "测试连接", "缺少可测试的 Host")
             return
+            
         self._perform_connection_test(service, url, headers, expect_model, is_qa=True)
 
     def _perform_connection_test(self, service, url, headers, expect_model=None, is_qa=False):
@@ -1032,27 +1048,58 @@ class TranslationConfigDialog(QDialog):
             msg = ""
             try:
                 # 针对不同服务发送最小有效请求
-                if service in ("ollama", "自定义") and expect_model:
-                    # Ollama / Custom: POST /api/generate
-                    gen_url = url
-                    payload = {"model": expect_model, "prompt": "ping", "stream": False}
-                    print(gen_url)
+                if service == "ollama" and expect_model and is_qa:
+                    # Ollama QA: POST /api/chat (与智能问答一致)
+                    chat_url = url.rstrip('/') + "/v1/chat/completions"
+                    payload = {
+                        "model": expect_model, 
+                        "messages": [{"role": "user", "content": "ping"}],
+                        "stream": False
+                    }
+                    print(f"测试Ollama QA API: {chat_url}")
+                    r = requests.post(chat_url, headers=headers, json=payload, timeout=8)
+                    ok = (r.status_code == 200)
+                    msg = f"状态码: {r.status_code}" if not ok else ""
+                elif service in ("ollama", "自定义") and expect_model and not is_qa:
+                    gen_url = url.rstrip('/') + "/v1/chat/completions"
+                    payload = {
+                        "model": expect_model, 
+                        "messages": [{"role": "user", "content": "ping"}],
+                        "stream": False
+                    }
+                    print(f"测试Ollama 翻译API: {gen_url}")
                     r = requests.post(gen_url, headers=headers, json=payload, timeout=8)
                     ok = (r.status_code == 200)
                     msg = f"状态码: {r.status_code}" if not ok else ""
                 elif service == "silicon" and expect_model:
-                    sil_url = url.rstrip('/') + "/chat/completions"
+                    # Silicon: POST /v1/chat/completions
+                    sil_url = url.rstrip('/') + "/v1/chat/completions"
                     payload = {
                         "model": expect_model,
                         "messages": [{"role": "user", "content": "ping"}],
                         "max_tokens": 1,
                         "stream": False
                     }
+                    print(f"测试Silicon API: {sil_url}")
                     r = requests.post(sil_url, headers=headers, json=payload, timeout=8)
+                    ok = (r.status_code == 200)
+                    msg = f"状态码: {r.status_code}" if not ok else ""
+                elif service == "自定义" and is_qa:
+                    # 自定义QA服务
+                    custom_url = url.rstrip('/') + "/v1/chat/completions"
+                    payload = {
+                        "model": expect_model,
+                        "messages": [{"role": "user", "content": "ping"}],
+                        "max_tokens": 1,
+                        "stream": False
+                    }
+                    print(f"测试自定义QA API: {custom_url}")
+                    r = requests.post(custom_url, headers=headers, json=payload, timeout=8)
                     ok = (r.status_code == 200)
                     msg = f"状态码: {r.status_code}" if not ok else ""
                 else:
                     # 简单 GET/HEAD 测试
+                    print(f"测试基本连接: {url}")
                     r = requests.get(url, headers=headers, timeout=10)
                     ok = (r.status_code == 200)
                     msg = f"状态码: {r.status_code}" if not ok else ""

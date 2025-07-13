@@ -1,26 +1,25 @@
 {
-  "models": {
-    "doclayout_path": "./models/doclayout_yolo_docstructbench_imgsz1024.onnx"
-  },
-  "fonts": {
-    "zh": "./fonts/SourceHanSerifCN-Regular.ttf",
-    "ja": "./fonts/SourceHanSerifJP-Regular.ttf",
-    "ko": "./fonts/SourceHanSerifKR-Regular.ttf",
-    "zh-TW": "./fonts/SourceHanSerifTW-Regular.ttf",
-    "default": "./fonts/GoNotoKurrent-Regular.ttf"
-  },
-  "translation": {
-    "service": "bing",
-    "lang_in": "en",
-    "lang_out": "zh",
-    "envs": {}
-  },
-  "qa_engine": {
-    "service": "关闭",
-    "envs": {}
-  },
-  "translation_enabled": true,
-  "NOTO_FONT_PATH": "./fonts/SourceHanSerifCN-Regular.ttf",
-  "pages": "",
-  "max_pages": 50
+    "models": {
+        "doclayout_path": "./models/doclayout_yolo_docstructbench_imgsz1024.onnx"
+    },
+    "fonts": {
+        "zh": "./fonts/SourceHanSerifCN-Regular.ttf",
+        "ja": "./fonts/SourceHanSerifJP-Regular.ttf",
+        "ko": "./fonts/SourceHanSerifKR-Regular.ttf",
+        "zh-TW": "./fonts/SourceHanSerifTW-Regular.ttf",
+        "default": "./fonts/GoNotoKurrent-Regular.ttf"
+    },
+    "translation": {
+        "service": "bing",
+        "lang_in": "en",
+        "lang_out": "zh",
+        "envs": {}
+    },
+    "qa_engine": {
+        "service": "关闭",
+        "envs": {}
+    },
+    "translation_enabled": true,
+    "NOTO_FONT_PATH": "./fonts/SourceHanSerifCN-Regular.ttf",
+    "pages": ""
 }

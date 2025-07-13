@@ -56,7 +56,7 @@ class QAEngineThread(QThread):
                 self._handle_silicon_qa()
             elif service == "ollama":
                 self._handle_ollama_qa()
-            elif service == "custom":
+            elif service == "自定义":
                 self._handle_custom_qa()
             else:
                 self.response_failed.emit("问答引擎未配置或已关闭")
@@ -181,9 +181,10 @@ class QAEngineThread(QThread):
     def _handle_custom_qa(self):
         """处理自定义问答引擎"""
         envs = self.config.get("envs", {})
-        api_url = envs.get("CUSTOM_API_URL")
-        api_key = envs.get("CUSTOM_API_KEY")  # 可选
+        api_url = envs.get("CUSTOM_HOST")
+        api_key = envs.get("CUSTOM_KEY")  # 可选
         model = envs.get("CUSTOM_MODEL")
+        url = api_url.rstrip('/') + "/v1/chat/completions"
 
         if not api_url or not model:
             self.response_failed.emit("自定义问答引擎配置不完整 (需要 CUSTOM_API_URL 和 CUSTOM_MODEL)")
@@ -207,7 +208,8 @@ class QAEngineThread(QThread):
                 "temperature": 0.7
             }
 
-            response = requests.post(api_url, headers=headers, json=data, stream=True)
+            print(f"自定义请求的url:{url}")
+            response = requests.post(url, headers=headers, json=data, stream=True)
             response.raise_for_status()
 
             # 处理流式响应 (兼容OpenAI格式)
