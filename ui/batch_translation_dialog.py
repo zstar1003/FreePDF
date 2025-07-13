@@ -4,7 +4,7 @@ import os
 import glob
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QEventLoop
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -63,17 +63,16 @@ class BatchTranslationThread(QThread):
                 translation_manager = TranslationManager()
                 
                 # 设置完成回调
-                translation_completed = False
+                event_loop = QEventLoop()
                 translation_error = None
                 
                 def on_completed(result_file):
-                    nonlocal translation_completed
-                    translation_completed = True
+                    event_loop.quit()
                     
                 def on_failed(error):
-                    nonlocal translation_completed, translation_error
-                    translation_completed = True
+                    nonlocal translation_error
                     translation_error = error
+                    event_loop.quit()
                 
                 # 开始翻译
                 translation_manager.start_translation(
@@ -82,9 +81,8 @@ class BatchTranslationThread(QThread):
                     failed_callback=on_failed
                 )
                 
-                # 等待翻译完成
-                while not translation_completed and not self._stop_requested:
-                    self.msleep(100)
+                # 阻塞等待翻译线程结束
+                event_loop.exec()
                 
                 if self._stop_requested:
                     break
@@ -289,23 +287,23 @@ class BatchTranslationDialog(QDialog):
         progress_group = QGroupBox("翻译进度")
         progress_layout = QVBoxLayout(progress_group)
         progress_layout.setContentsMargins(15, 20, 15, 15)
-        
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         progress_layout.addWidget(self.progress_bar)
-        
+
         self.current_file_label = QLabel("")
         self.current_file_label.setVisible(False)
         self.current_file_label.setStyleSheet("color: #007acc; font-weight: bold;")
         progress_layout.addWidget(self.current_file_label)
-        
-        # 结果显示
-        self.result_text = QTextEdit()
-        self.result_text.setMaximumHeight(100)
-        self.result_text.setVisible(False)
-        self.result_text.setReadOnly(True)
-        progress_layout.addWidget(self.result_text)
-        
+
+        # 移除结果显示框
+        # self.result_text = QTextEdit()
+        # self.result_text.setMaximumHeight(100)
+        # self.result_text.setVisible(False)
+        # self.result_text.setReadOnly(True)
+        # progress_layout.addWidget(self.result_text)
+
         layout.addWidget(progress_group)
         
         # 按钮区域
@@ -424,8 +422,8 @@ class BatchTranslationDialog(QDialog):
         # 显示进度组件
         self.progress_bar.setVisible(True)
         self.current_file_label.setVisible(True)
-        self.result_text.setVisible(True)
-        self.result_text.clear()
+        # self.result_text.setVisible(True) # Removed as per edit hint
+        # self.result_text.clear() # Removed as per edit hint
         
         # 更新按钮状态
         self.start_btn.setVisible(False)
@@ -435,6 +433,8 @@ class BatchTranslationDialog(QDialog):
         # 设置进度条
         self.progress_bar.setRange(0, len(self.pdf_files))
         self.progress_bar.setValue(0)
+        # 记录已完成数
+        self._completed_count = 0
         
         # 创建并启动翻译线程
         self.translation_thread = BatchTranslationThread(self.pdf_files, lang_in, lang_out, self)
@@ -450,35 +450,38 @@ class BatchTranslationDialog(QDialog):
             self.translation_thread.wait(3000)  # 等待3秒
             
         self.reset_ui()
-        self.result_text.append("翻译已停止。")
+        # self.result_text.append("翻译已停止。") # Removed as per edit hint
         
     def update_progress(self, current, total, current_file):
         """更新进度"""
-        self.progress_bar.setValue(current)
+        # 修正进度条显示：当前处理第N个文件时，进度条应为N-1
+        self.progress_bar.setValue(current - 1)
         self.current_file_label.setText(f"正在翻译: {current_file} ({current}/{total})")
         
     def file_completed(self, file_path, success, message):
         """文件翻译完成"""
-        filename = os.path.basename(file_path)
-        if success:
-            self.result_text.append(f"✓ {filename}: {message}")
-        else:
-            self.result_text.append(f"✗ {filename}: {message}")
+        # 统计已完成数
+        if not hasattr(self, '_completed_count'):
+            self._completed_count = 0
+        self._completed_count += 1
+        # 进度条+1
+        self.progress_bar.setValue(self._completed_count)
+        # 可选：弹窗或label显示结果
+        # filename = os.path.basename(file_path)
+        # if success:
+        #     self.result_text.append(f"✓ {filename}: {message}")
+        # else:
+        #     self.result_text.append(f"✗ {filename}: {message}")
+        # 滚动到底部（已移除result_text）
             
-        # 滚动到底部
-        cursor = self.result_text.textCursor()
-        cursor.movePosition(cursor.MoveOperation.End)
-        self.result_text.setTextCursor(cursor)
-        
     def batch_completed(self, success_count, total_count):
         """批量翻译完成"""
         self.reset_ui()
-        
+        # 进度条100%
+        self.progress_bar.setValue(total_count)
         # 显示完成信息
         self.current_file_label.setText(f"批量翻译完成: {success_count}/{total_count} 成功")
-        self.result_text.append(f"\n批量翻译完成！成功: {success_count}, 失败: {total_count - success_count}")
-        
-        # 显示完成消息
+        # 可选：弹窗提示
         if success_count == total_count:
             QMessageBox.information(self, "完成", f"批量翻译成功完成！\n共翻译 {total_count} 个文件。")
         else:
