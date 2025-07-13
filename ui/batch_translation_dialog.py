@@ -105,7 +105,7 @@ class BatchTranslationDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("批量翻译")
-        self.setFixedSize(700, 600)
+        self.setFixedSize(700, 800)
         self.setModal(True)
         
         # 设置样式
