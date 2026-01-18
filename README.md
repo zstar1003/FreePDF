@@ -188,6 +188,9 @@ python main.py
 3. 表格中的内容没有翻译？  
   **回答：** pdf2zh暂不支持表格内容翻译，如需翻译表格，可查看本仓库的`dev`分支，采用`pdf2zh_next`进行翻译，但由于速度较慢，未合并进主分支。
 
+4. win版报错：无法打开要写入的文件 `C:\Program Files\FreePDF\internal\ucrtbase.dll`
+  **回答：** 关闭杀毒软件，右键用管理员身份运行软件。
+
 如有其它问题，欢迎提交 issue 或 直接联系我的微信 zstar1003 反馈问题。
 
 ## 🛠️ 如何贡献
