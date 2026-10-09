@@ -3,6 +3,8 @@
 import os
 import glob
 import shutil
+from PyInstaller.utils.hooks import copy_metadata
+from PyInstaller.building.utils import format_binaries_and_datas
 import sys
 
 # 获取当前目录
@@ -91,6 +93,7 @@ a = Analysis(
         'requests',
         'urllib3',
         'googletrans',
+        'tiktoken_ext.openai_public',
 
         # 多进程支持
         'multiprocessing',
@@ -113,6 +116,24 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
+
+# OpenCV resolves its Python loader through Resources symlinks, while PyInstaller
+# places the native extension under Frameworks. Point the loader at _MEIPASS
+# before BUNDLE seals and signs the app; no post-sign bundle edits are needed.
+cv2_config = os.path.join(WORKPATH, 'cv2-config-3.py')
+with open(cv2_config, 'w', encoding='utf-8') as config_file:
+    config_file.write("PYTHON_EXTENSIONS_PATHS = [os.path.join(sys._MEIPASS, 'cv2')] + PYTHON_EXTENSIONS_PATHS\n")
+for index, (destination, source, kind) in enumerate(a.datas):
+    if destination == 'cv2/config-3.py':
+        a.datas[index] = (destination, cv2_config, kind)
+        break
+else:
+    raise RuntimeError('OpenCV loader configuration was not collected')
+
+
+# Retain installed component versions in exported support diagnostics.
+for package in ('PyQt6', 'PyQt6-Qt6', 'PyQt6-WebEngine', 'PyQt6-WebEngine-Qt6', 'PyMuPDF', 'pdf2zh', 'pyinstaller'):
+    a.datas += [(destination, source, 'DATA') for destination, source in format_binaries_and_datas(copy_metadata(package))]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 

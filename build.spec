@@ -3,6 +3,8 @@
 import os
 import glob
 import shutil
+from PyInstaller.utils.hooks import copy_metadata
+from PyInstaller.building.utils import format_binaries_and_datas
 
 # 获取当前目录
 current_dir = os.path.dirname(os.path.abspath(SPEC))
@@ -157,6 +159,7 @@ a = Analysis(
         'requests',
         'urllib3',
         'googletrans',
+        'tiktoken_ext.openai_public',
         
         # 多进程支持
         'multiprocessing',
@@ -174,6 +177,11 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
+
+
+# Retain installed component versions in exported support diagnostics.
+for package in ('PyQt6', 'PyQt6-Qt6', 'PyQt6-WebEngine', 'PyQt6-WebEngine-Qt6', 'PyMuPDF', 'pdf2zh', 'pyinstaller'):
+    a.datas += [(destination, source, 'DATA') for destination, source in format_binaries_and_datas(copy_metadata(package))]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 

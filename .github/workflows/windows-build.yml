@@ -37,6 +37,8 @@ jobs:
               throw "Missing packaged resource: $relative"
             }
           }
+      - name: Check packaged startup
+        run: python tools/smoke_frozen.py dist/FreePDF/FreePDF.exe
       - name: Build NSIS installer
         shell: pwsh
         run: |
