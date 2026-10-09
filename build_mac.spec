@@ -5,6 +5,7 @@ import glob
 import shutil
 from PyInstaller.utils.hooks import copy_metadata
 from PyInstaller.building.utils import format_binaries_and_datas
+from PyInstaller.config import CONF
 import sys
 
 # 获取当前目录
@@ -120,7 +121,7 @@ a = Analysis(
 # OpenCV resolves its Python loader through Resources symlinks, while PyInstaller
 # places the native extension under Frameworks. Point the loader at _MEIPASS
 # before BUNDLE seals and signs the app; no post-sign bundle edits are needed.
-cv2_config = os.path.join(WORKPATH, 'cv2-config-3.py')
+cv2_config = os.path.join(CONF['workpath'], 'cv2-config-3.py')
 with open(cv2_config, 'w', encoding='utf-8') as config_file:
     config_file.write("PYTHON_EXTENSIONS_PATHS = [os.path.join(sys._MEIPASS, 'cv2')] + PYTHON_EXTENSIONS_PATHS\n")
 for index, (destination, source, kind) in enumerate(a.datas):
