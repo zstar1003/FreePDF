@@ -103,6 +103,20 @@ def test_chinese_startup_output_survives_english_launcher_console(log_directory)
     assert "ONNXRuntime库路径已添加" in Path(diagnostics._handler.baseFilename).read_text(encoding="utf-8")
 
 
+def test_runtime_hook_handles_chinese_before_dependency_initialization(log_directory, monkeypatch):
+    import io
+    import runpy
+    buffer = io.BytesIO()
+    console = io.TextIOWrapper(buffer, encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", console)
+    monkeypatch.setattr(sys, "argv", ["FreePDF.exe"])
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    runpy.run_path(str(Path(__file__).resolve().parent.parent / "diagnostics_hook.py"))
+    print("ONNXRuntime库路径已添加")
+    console.flush()
+    assert "ONNXRuntime库路径已添加" in buffer.getvalue().decode("utf-8")
+
+
 def test_software_rendering_preferences_take_effect_on_restart(log_directory, monkeypatch):
     tmp_path = log_directory
     monkeypatch.setattr(diagnostics, "data_dir", lambda: tmp_path)
