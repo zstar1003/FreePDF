@@ -123,7 +123,7 @@ a = Analysis(
 # before BUNDLE seals and signs the app; no post-sign bundle edits are needed.
 cv2_config = os.path.join(CONF['workpath'], 'cv2-config-3.py')
 with open(cv2_config, 'w', encoding='utf-8') as config_file:
-    config_file.write("PYTHON_EXTENSIONS_PATHS = [os.path.join(sys._MEIPASS, 'cv2')] + PYTHON_EXTENSIONS_PATHS\n")
+    config_file.write("sys.OpenCV_REPLACE_SYS_PATH_0 = True\nPYTHON_EXTENSIONS_PATHS = [os.path.join(sys._MEIPASS, 'cv2')] + PYTHON_EXTENSIONS_PATHS\n")
 for index, (destination, source, kind) in enumerate(a.datas):
     if destination == 'cv2/config-3.py':
         a.datas[index] = (destination, cv2_config, kind)
