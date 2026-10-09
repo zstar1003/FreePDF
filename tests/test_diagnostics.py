@@ -93,6 +93,16 @@ def test_windowed_stdout_and_unterminated_lines_are_captured(log_directory):
     assert "hidden-value" not in output
 
 
+def test_chinese_startup_output_survives_english_launcher_console(log_directory):
+    import io
+    console = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    stream = diagnostics.LogStream(console, logging.INFO)
+    stream.write("ONNXRuntime库路径已添加\n")
+    stream.flush()
+    diagnostics._handler.flush()
+    assert "ONNXRuntime库路径已添加" in Path(diagnostics._handler.baseFilename).read_text(encoding="utf-8")
+
+
 def test_software_rendering_preferences_take_effect_on_restart(log_directory, monkeypatch):
     tmp_path = log_directory
     monkeypatch.setattr(diagnostics, "data_dir", lambda: tmp_path)
