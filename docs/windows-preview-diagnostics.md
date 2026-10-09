@@ -38,7 +38,7 @@
 
 ## 验证记录
 
-本地 macOS 测试使用 Python 3.12、PyQt6 6.9.1、Qt/WebEngine 6.9.1（先前也验证了 6.9.2）：验证 Windows 打包数据展开、特殊字符/盘符/UNC URL、开发与打包资源解析、日志轮转/脱敏/导出、设置入口，以及真实 Qt WebEngine 的 PDF 页面渲染、损坏 PDF 和缺失文件错误。Windows 发行包由 GitHub Actions 构建并运行回归测试；Windows 11 特定设备的故障仍需结合现场日志确认。
+本地 macOS 测试使用 Python 3.12、PyQt6 6.9.1、Qt/WebEngine 6.9.1（先前也验证了 6.9.2）：验证 Windows 打包数据展开、特殊字符/盘符/UNC URL、开发与打包资源解析、日志轮转/脱敏/导出、设置入口，以及真实 Qt WebEngine 的 PDF 页面渲染、损坏 PDF 和缺失文件错误。macOS 与 GitHub Actions Windows 构建环境均通过 25 项回归测试；两平台打包应用均通过翻译引擎预加载与 WebEngine 启动检查，Mac 签名应用还经过实际界面预览检查。Windows 11 特定设备的故障仍需结合现场日志确认。
 
 运行回归测试：
 
