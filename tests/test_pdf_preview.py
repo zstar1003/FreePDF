@@ -67,7 +67,7 @@ def test_missing_worker_is_reported_as_incomplete_distribution(tmp_path, monkeyp
 
 def test_windows_packaging_preserves_pdfjs_layout():
     from PyInstaller.building.utils import format_binaries_and_datas
-    spec = ast.parse((ROOT / "build.spec").read_text())
+    spec = ast.parse((ROOT / "build.spec").read_text(encoding="utf-8"))
     analysis = next(node for node in ast.walk(spec) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Analysis")
     data = ast.literal_eval(next(item.value for item in analysis.keywords if item.arg == "datas"))
     pdfjs_entries = [entry for entry in data if entry[0] == "pdfjs"]
