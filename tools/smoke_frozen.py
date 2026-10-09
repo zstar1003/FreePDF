@@ -8,6 +8,44 @@ import tempfile
 import time
 
 
+def print_startup_failure(process_id, log, console):
+    for label, path in (("Diagnostic log", log), ("Bootloader console", console)):
+        content = path.read_text(encoding="utf-8", errors="replace") if path.exists() else "not created"
+        print(f"{label}:\n{content[-16000:]}")
+    if sys.platform != "win32":
+        return
+    # A windowed PyInstaller boot failure may show a dialog before main.py can
+    # initialize logging. Capture text only from this application's windows.
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+    user32.EnumChildWindows.argtypes = [wintypes.HWND, callback_type, wintypes.LPARAM]
+
+    @callback_type
+    def child_text(handle, _):
+        buffer = ctypes.create_unicode_buffer(user32.GetWindowTextLengthW(handle) + 1)
+        user32.GetWindowTextW(handle, buffer, len(buffer))
+        if buffer.value:
+            print("Application window:", buffer.value)
+        return True
+
+    @callback_type
+    def own_windows(handle, _):
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(handle, ctypes.byref(owner))
+        if owner.value == process_id:
+            child_text(handle, 0)
+            user32.EnumChildWindows(handle, child_text, 0)
+        return True
+
+    user32.EnumWindows(own_windows, 0)
+
+
 def main():
     executable = Path(sys.argv[1]).resolve()
     environment = dict(os.environ, QT_QPA_PLATFORM="offscreen", QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu")
@@ -38,6 +76,10 @@ def main():
                         raise RuntimeError("Packaged translation preload failed; inspect diagnostic log")
                     time.sleep(0.5)
                 raise RuntimeError("Packaged application did not finish startup within 45 seconds")
+            except Exception:
+                output.flush()
+                print_startup_failure(process.pid, log, Path(temporary) / "console.log")
+                raise
             finally:
                 if process.poll() is None:
                     process.terminate()
