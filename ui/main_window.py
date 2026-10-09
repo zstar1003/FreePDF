@@ -2,11 +2,12 @@
 
 import os
 import webbrowser
+import uuid
 
 import requests
 
 # 应用版本信息
-__version__ = "5.1.2"
+__version__ = "5.1.3"
 
 from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon
@@ -40,8 +41,8 @@ from ui.components import (
     TranslationConfigDialog,
 )
 from ui.pdfjs_widget import PdfJsWidget  # Use the new widget
-from ui.log_dialog import LogDialog
 from utils.config_path import get_config_file_path
+from utils.diagnostics import get_logger
 
 
 class MainWindow(QMainWindow):
@@ -56,6 +57,9 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
 
         self.current_file = None
+        self._preview_failures = {}
+        self._import_id = None
+        self._diagnostics = get_logger("workflow")
         self._last_pdf_file = None  # 用于追踪PDF文件变化
         self.translation_manager = TranslationManager()
         self._is_syncing = False
@@ -422,27 +426,6 @@ class MainWindow(QMainWindow):
         self.progress_percent.setVisible(False)
         self.status_bar.addWidget(self.progress_percent)
 
-        # 详细日志按钮（放在状态栏右侧）
-        self.log_btn = QPushButton("详细日志")
-        self.log_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #6c757d;
-                color: white;
-                border: none;
-                padding: 4px 12px;
-                border-radius: 3px;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #5a6268;
-            }
-        """)
-        self.log_btn.clicked.connect(self.show_log_dialog)
-        self.status_bar.addPermanentWidget(self.log_btn)
-
-        # 日志对话框实例（延迟创建）
-        self._log_dialog = None
-
     def setup_connections(self):
         """设置信号连接"""
         # 文件操作
@@ -469,6 +452,10 @@ class MainWindow(QMainWindow):
         # Connect the scroll signals from both new widgets
         self.left_pdf_widget.scrollChanged.connect(self.on_scroll_changed)
         self.right_pdf_widget.scrollChanged.connect(self.on_scroll_changed)
+        self.left_pdf_widget.previewFailed.connect(self.on_preview_failed)
+        self.right_pdf_widget.previewFailed.connect(self.on_preview_failed)
+        self.left_pdf_widget.previewReady.connect(self.on_preview_ready)
+        self.right_pdf_widget.previewReady.connect(self.on_preview_ready)
 
         # Handle download requests from the web engine
         self.web_profile.downloadRequested.connect(self.on_download_requested)
@@ -1111,14 +1098,17 @@ class MainWindow(QMainWindow):
 
     def load_pdf_file(self, file_path):
         """加载PDF文件"""
+        self._import_id = uuid.uuid4().hex[:10]
+        self._preview_failures.clear()
+        self._diagnostics.info("import=%s PDF import requested path=%s", self._import_id, file_path)
         # 检查是否是新的PDF文件
         is_new_file = self.current_file != file_path
 
         self.current_file = file_path
-        self.left_pdf_widget.load_pdf(file_path)
         self.status_label.set_status(
-            f"已加载: {os.path.basename(file_path)}", "success"
+            f"正在加载: {os.path.basename(file_path)}", "info"
         )
+        self.left_pdf_widget.load_pdf(file_path)
 
         # 如果是新文件且智能问答面板存在内容，清空它以便重新加载
         if (
@@ -1138,6 +1128,8 @@ class MainWindow(QMainWindow):
             # 直接在右侧加载原始文件，不进行翻译
             self.right_pdf_widget.load_pdf(file_path)
             self.status_label.set_status("翻译已禁用，直接显示原文", "info")
+            self._diagnostics.info("import=%s translation disabled; previewing original", self._import_id)
+            self._refresh_preview_warning()
             return
 
         # 检查同目录是否已有翻译后的 -mono 文件
@@ -1146,13 +1138,31 @@ class MainWindow(QMainWindow):
             # 直接加载现有翻译版本
             self.right_pdf_widget.load_pdf(existing)
             self.status_label.set_status("已加载本地翻译版本", "success")
+            self._diagnostics.info("import=%s using existing translation=%s", self._import_id, existing)
+            self._refresh_preview_warning()
             return
 
         # 否则开始翻译
-        self.right_pdf_widget.view.setHtml(
-            "<div style='display:flex;justify-content:center;align-items:center;height:100%;font-size:16px;color:grey;'>正在准备翻译...</div>"
-        )
+        self.right_pdf_widget.show_message("正在准备翻译...")
         self.start_translation(file_path)
+        self._refresh_preview_warning()
+
+    def on_preview_failed(self, view_name, message):
+        self._preview_failures[view_name] = message
+        self._diagnostics.error("import=%s preview failed view=%s message=%s", self._import_id, view_name, message)
+        self._refresh_preview_warning()
+
+    def on_preview_ready(self, view_name):
+        recovered = self._preview_failures.pop(view_name, None)
+        self._diagnostics.info("import=%s preview rendered view=%s", self._import_id, view_name)
+        if recovered and not self._preview_failures:
+            self.status_label.set_status("PDF 预览已恢复", "success")
+        self._refresh_preview_warning()
+
+    def _refresh_preview_warning(self):
+        if self._preview_failures:
+            views = "、".join("原文" if name == "left_view" else "译文" for name in self._preview_failures)
+            self.status_label.set_status(f"{views}预览异常：请在引擎配置 → 诊断与日志中导出日志", "warning")
 
     def _is_translation_enabled(self):
         """从配置文件判断是否启用翻译 (默认启用)"""
@@ -1221,6 +1231,7 @@ class MainWindow(QMainWindow):
 
     def start_translation(self, file_path):
         """开始翻译PDF"""
+        self._diagnostics.info("import=%s translation requested path=%s", self._import_id, file_path)
         # 显示并初始化进度条
         if hasattr(self, "progress_bar"):
             self.progress_bar.setVisible(True)
@@ -1256,23 +1267,26 @@ class MainWindow(QMainWindow):
                 pass
         else:
             sanitized = message.replace("\n", " ")
-            self.right_pdf_widget.view.setHtml(
-                f"<div style='display:flex;justify-content:center;align-items:center;height:100%;font-size:16px;color:grey;'>{sanitized}</div>"
-            )
+            self.right_pdf_widget.show_message(sanitized)
             self.status_label.set_status(sanitized, "info")
+            self._refresh_preview_warning()
 
     @pyqtSlot(str)
     def on_translation_completed(self, translated_file):
         """翻译完成"""
+        self._diagnostics.info("import=%s translation completed output=%s exists=%s", self._import_id,
+                               translated_file, os.path.exists(translated_file))
         if os.path.exists(translated_file):
+            self._preview_failures.pop("right_view", None)
             self.right_pdf_widget.load_pdf(translated_file)
             self.status_label.set_status("翻译完成", "success")
+        else:
+            self.on_translation_failed(f"翻译文件 '{translated_file}' 不存在")
+        self._refresh_preview_warning()
         if hasattr(self, "progress_bar"):
             self.progress_bar.setVisible(False)
         if hasattr(self, "progress_percent"):
             self.progress_percent.setVisible(False)
-        else:
-            self.on_translation_failed(f"翻译文件 '{translated_file}' 不存在")
 
     def _validate_pdf_file(self, file_path):
         """验证PDF文件是否有效"""
@@ -1346,6 +1360,7 @@ class MainWindow(QMainWindow):
     @pyqtSlot(str)
     def on_translation_failed(self, error_message):
         """翻译失败"""
+        self._diagnostics.error("import=%s translation failed: %s", self._import_id, error_message)
         self.hide_loading()
         if hasattr(self, "progress_bar"):
             self.progress_bar.setVisible(False)
@@ -1375,14 +1390,6 @@ class MainWindow(QMainWindow):
                 self.progress_percent.setVisible(False)
             self.status_label.set_status("翻译已停止", "warning")
 
-    def show_log_dialog(self):
-        """显示详细日志对话框"""
-        if self._log_dialog is None:
-            self._log_dialog = LogDialog(self)
-        self._log_dialog.show()
-        self._log_dialog.raise_()
-        self._log_dialog.activateWindow()
-
     # def on_text_selected(self, text): # REMOVED: Feature not available in new widget
     #     """文本选中"""
     #     if text.strip():
@@ -1400,6 +1407,7 @@ class MainWindow(QMainWindow):
 
         if reply == QMessageBox.StandardButton.Yes:
             # Clean up resources only when the user confirms exiting.
+            self._diagnostics.info("window closing")
             if hasattr(self, "left_pdf_widget") and self.left_pdf_widget:
                 self.left_pdf_widget.cleanup()
             if hasattr(self, "right_pdf_widget") and self.right_pdf_widget:

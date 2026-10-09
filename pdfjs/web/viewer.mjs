@@ -15188,7 +15188,9 @@ const PDFViewerApplication = {
     const params = parseQueryString(queryString);
     file = params.get("file") ?? AppOptions.get("defaultUrl");
     try {
-      file = new URL(decodeURIComponent(file)).href;
+      // URLSearchParams already decoded the query value. Keep file URL escapes
+      // such as %23, %25 and %3F intact so they remain part of the filename.
+      file = new URL(file).href;
     } catch {
       file = encodeURIComponent(file).replaceAll("%2F", "/");
     }

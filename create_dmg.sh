@@ -6,7 +6,7 @@ set -e
 
 # 配置变量
 APP_NAME="FreePDF"
-VERSION="5.1.2"
+VERSION="5.1.3"
 APP_PATH="dist/${APP_NAME}.app"
 DMG_NAME="${APP_NAME}_v${VERSION}_macOS"
 DMG_TEMP="${DMG_NAME}_temp.dmg"

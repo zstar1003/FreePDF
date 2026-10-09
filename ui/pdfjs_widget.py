@@ -1,10 +1,31 @@
+import html
+import json
+import logging
 import os
+import time
+import uuid
+from urllib.parse import quote
 
-from PyQt6.QtCore import QObject, Qt, QUrl, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, Qt, QTimer, QUrl, QUrlQuery, pyqtSignal, pyqtSlot
 from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
+from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineScript, QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QHBoxLayout, QWidget
+
+from utils.diagnostics import get_logger
+from utils.pdfjs_diagnostics import PDFJS_DIAGNOSTICS_JS, PDFJS_SNAPSHOT_JS
+from utils.pdfjs_paths import resolve_viewer
+
+
+def build_viewer_url(viewer_path, pdf_url, locale=None):
+    """Encode a file URL as a query value, preserving its own percent escapes."""
+    url = QUrl.fromLocalFile(str(viewer_path))
+    query = QUrlQuery()
+    query.addQueryItem("file", quote(pdf_url.toString(QUrl.ComponentFormattingOption.FullyEncoded), safe=""))
+    url.setQuery(query)
+    if locale:
+        url.setFragment("locale=" + locale)
+    return url
 
 # This JS code will be injected into each viewer instance.
 # It sets up the communication bridge and defines functions that Python can call.
@@ -77,20 +98,45 @@ class Bridge(QObject):
 
 class WebEnginePage(QWebEnginePage):
     """Custom page to log JS console messages."""
+    diagnosticEvent = pyqtSignal(object)
+
     def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
-        if level in [QWebEnginePage.JavaScriptConsoleMessageLevel.WarningMessageLevel, QWebEnginePage.JavaScriptConsoleMessageLevel.ErrorMessageLevel]:
-             print(f"JS Console ({sourceID}:{lineNumber}): {message}")
+        if message.startswith("FREEPDF_DIAGNOSTIC:"):
+            try:
+                self.diagnosticEvent.emit(json.loads(message.split(":", 1)[1]))
+            except ValueError:
+                get_logger("preview").warning("Malformed diagnostic message: %s", message)
+            return
+        severity = {
+            QWebEnginePage.JavaScriptConsoleMessageLevel.InfoMessageLevel: logging.DEBUG,
+            QWebEnginePage.JavaScriptConsoleMessageLevel.WarningMessageLevel: logging.WARNING,
+            QWebEnginePage.JavaScriptConsoleMessageLevel.ErrorMessageLevel: logging.ERROR,
+        }.get(level, logging.INFO)
+        get_logger("javascript").log(severity, "view=%s load=%s %s:%s %s",
+                                     self.property("view_name"), self.property("load_id"), sourceID, lineNumber, message)
 
 class PdfJsWidget(QWidget):
     """PDF.js Viewer 封装控件，可指定界面语言。"""
 
     # Expose the scrollChanged signal from the bridge
     scrollChanged = pyqtSignal(str, int, int)
+    previewFailed = pyqtSignal(str, str)
+    previewReady = pyqtSignal(str)
 
     def __init__(self, name: str, profile: QWebEngineProfile, locale: str = "zh-cn", parent=None):
         super().__init__(parent)
         self.setObjectName(name)
         self._name = name
+        self._load_id = None
+        self._started_at = 0
+        self._state = {}
+        self._awaiting_pdf = False
+        self._failure_reported = False
+        self._logger = get_logger("preview")
+        self._watchdog = QTimer(self)
+        self._watchdog.setSingleShot(True)
+        self._watchdog.setInterval(30000)
+        self._watchdog.timeout.connect(self._check_preview)
         # 保存语言代码，可在运行时修改
         self._locale = locale.lower() if locale else None
 
@@ -104,7 +150,10 @@ class PdfJsWidget(QWidget):
         # Create and configure the web view
         self.view = QWebEngineView()
         
-        # --- 优化渲染，尝试解决拖拽闪烁问题 ---
+        page = WebEnginePage(self.profile, self.view)
+        page.setProperty("view_name", name)
+        self.view.setPage(page)
+        # Configure the actual custom page; settings on the old default page are discarded.
         # 1. 设置背景色为白色，避免闪烁时出现黑色背景
         self.view.page().setBackgroundColor(Qt.GlobalColor.white)
         
@@ -117,8 +166,6 @@ class PdfJsWidget(QWidget):
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
         
         self.view.setAcceptDrops(False)  # Disable drop events on the view
-        page = WebEnginePage(self.profile, self.view)
-        self.view.setPage(page)
         self.setLayout(QHBoxLayout())
         self.layout().setContentsMargins(0, 0, 0, 0)
         self.layout().addWidget(self.view)
@@ -127,6 +174,19 @@ class PdfJsWidget(QWidget):
         channel = QWebChannel(page)
         page.setWebChannel(channel)
         channel.registerObject("bridge", self.bridge)
+
+        script = QWebEngineScript()
+        script.setName("FreePDF diagnostics")
+        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+        script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+        script.setRunsOnSubFrames(False)
+        script.setSourceCode(PDFJS_DIAGNOSTICS_JS)
+        page.scripts().insert(script)
+        self._diagnostic_script = script
+        page.diagnosticEvent.connect(self._on_diagnostic_event)
+        page.loadStarted.connect(lambda: self._log("navigation_started"))
+        page.loadingChanged.connect(self._on_loading_changed)
+        page.renderProcessTerminated.connect(self._on_renderer_terminated)
 
         # When the page finishes loading, inject our script
         page.loadFinished.connect(self.on_load_finished)
@@ -137,73 +197,142 @@ class PdfJsWidget(QWidget):
 
     def load_pdf(self, pdf_path):
         """Loads a PDF file into the view."""
+        self._watchdog.stop()
+        self._load_id = uuid.uuid4().hex[:10]
+        self._started_at = time.monotonic()
+        self._awaiting_pdf = pdf_path != "about:blank"
+        self._failure_reported = False
+        self._state = {"view": self._name, "load_id": self._load_id, "pdf_path": str(pdf_path),
+                       "stage": "requested", "first_page_rendered": False}
+        self.view.page().setProperty("load_id", self._load_id)
+        scripts = self.view.page().scripts()
+        scripts.remove(self._diagnostic_script)
+        source = PDFJS_DIAGNOSTICS_JS.replace("{event, ...details}",
+                                             "{event, load_id: " + json.dumps(self._load_id) + ", ...details}")
+        self._diagnostic_script.setSourceCode(source)
+        scripts.insert(self._diagnostic_script)
         if pdf_path == "about:blank":
              self.view.setUrl(QUrl(pdf_path))
              return
 
-        # 获取viewer.html的正确路径(兼容开发和打包环境)
-        import sys
-        if getattr(sys, 'frozen', False):
-            # 打包环境 - 尝试多个可能的路径
-            base_path = os.path.dirname(sys.executable)
-            possible_paths = [
-                os.path.join(base_path, 'pdfjs', 'web', 'viewer.html'),
-                os.path.join(base_path, '_internal', 'pdfjs', 'web', 'viewer.html'),
-            ]
-            if hasattr(sys, '_MEIPASS'):
-                possible_paths.insert(0, os.path.join(sys._MEIPASS, 'pdfjs', 'web', 'viewer.html'))
-            
-            viewer_path = None
-            for path in possible_paths:
-                if os.path.exists(path):
-                    viewer_path = path
-                    break
-            
-            if viewer_path is None:
-                print(f"错误: 找不到viewer.html，尝试过的路径: {possible_paths}")
-                viewer_path = possible_paths[0]  # 使用第一个作为默认
-        else:
-            # 开发环境
-            viewer_path = os.path.abspath('pdfjs/web/viewer.html')
-
-        viewer_url = QUrl.fromLocalFile(viewer_path)
-
-        # 确保PDF路径正确编码,特别是中文路径
         pdf_file_path = os.path.abspath(pdf_path)
-        
-        # 调试信息
-        print(f"PDF路径: {pdf_file_path}")
-        print(f"PDF文件存在: {os.path.exists(pdf_file_path)}")
-        print(f"Viewer路径: {viewer_path}")
-        print(f"Viewer文件存在: {os.path.exists(viewer_path)}")
-        
-        # 使用urllib进行正确的路径编码
-        import urllib.parse
-        # 将路径转换为file:// URL格式
-        if os.name == 'nt':  # Windows
-            # Windows路径需要特殊处理
-            pdf_file_url = 'file:///' + pdf_file_path.replace('\\', '/')
-            # 对路径进行URL编码，但保留斜杠和冒号
-            pdf_file_url = urllib.parse.quote(pdf_file_url, safe='/:')
-        else:
-            pdf_file_url = QUrl.fromLocalFile(pdf_file_path).toString()
-        
-        print(f"PDF URL: {pdf_file_url}")
+        try:
+            with open(pdf_file_path, "rb") as source:
+                header = source.read(8)
+            self._log("file_access", path=pdf_file_path, size=os.path.getsize(pdf_file_path),
+                      pdf_header=header.startswith(b"%PDF-"))
+            viewer_path, checks = resolve_viewer()
+            self._log("resource_check", candidates=checks)
+        except OSError:
+            self._logger.exception("view=%s load=%s PDF/resource access failed", self._name, self._load_id)
+            self._report_failure("无法读取 PDF 或缺少预览资源，请在引擎配置中导出日志。", show_in_view=True)
+            return
+        viewer_url = build_viewer_url(viewer_path, QUrl.fromLocalFile(pdf_file_path), self._locale)
+        self._state["viewer_url"] = viewer_url.toString(QUrl.ComponentFormattingOption.FullyEncoded)
+        self._log("load_requested", url=self._state["viewer_url"],
+                  accelerated_canvas=self.view.settings().testAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled))
+        self._watchdog.start()
+        self.view.load(viewer_url)
 
-        # 构建完整的viewer URL
-        viewer_url_str = viewer_url.toString()
-        full_url = f"{viewer_url_str}?file={pdf_file_url}"
-        
-        if self._locale:
-            full_url += f"#locale={self._locale}"
-        
-        print(f"完整URL: {full_url}")
-        
-        self.view.load(QUrl(full_url))
+    def _log(self, event, **details):
+        self._logger.info("view=%s load=%s elapsed=%.3f event=%s details=%s", self._name, self._load_id,
+                          time.monotonic() - self._started_at if self._started_at else 0,
+                          event, json.dumps(details, ensure_ascii=False))
+
+    def diagnostic_state(self):
+        return dict(self._state, visible=self.isVisible(), width=self.width(), height=self.height())
+
+    def _on_loading_changed(self, info):
+        self._log("navigation_status", status=info.status().name, error_code=info.errorCode(),
+                  error_domain=info.errorDomain().name, error=info.errorString(), url=info.url().toString())
+        if (self._awaiting_pdf and info.status().name == "LoadFailedStatus"
+                and info.url().toString(QUrl.ComponentFormattingOption.FullyEncoded) == self._state.get("viewer_url")):
+            self._report_failure("预览页面加载失败，请在引擎配置中导出日志。")
+
+    def _on_diagnostic_event(self, payload):
+        if not self._awaiting_pdf or payload.get("load_id") != self._load_id:
+            return
+        event = payload.get("event", "unknown")
+        self._state["stage"] = event
+        self._log(event, **{key: value for key, value in payload.items() if key != "event"})
+        if event == "document_loaded":
+            self._state["pages"] = payload.get("pages")
+        if event == "first_page_rendered":
+            self._state["first_page_rendered"] = True
+            self._state.pop("failure", None)
+            self._failure_reported = False
+            self._watchdog.stop()
+            self.previewReady.emit(self._name)
+            load_id = self._load_id
+
+            def snapshot_received(snapshot):
+                if load_id == self._load_id and self._awaiting_pdf:
+                    self._state["snapshot"] = snapshot
+                    self._log("render_snapshot", snapshot=snapshot)
+
+            self.view.page().runJavaScript(PDFJS_SNAPSHOT_JS, snapshot_received)
+        elif event in ("document_error", "page_render_error", "javascript_error", "unhandled_rejection"):
+            self._state["last_error"] = payload.get("message")
+            # Record JS errors immediately; the watchdog determines whether preview is actually stalled.
+            if event in ("document_error", "page_render_error"):
+                self._report_failure("PDF 预览失败，请在引擎配置中导出日志。")
+
+    def _report_failure(self, message, show_in_view=False):
+        self._watchdog.stop()
+        self._state["failure"] = message
+        if show_in_view:
+            self._awaiting_pdf = False
+            self.view.setHtml("<p style='padding:24px;color:#a33'>" + html.escape(message) + "</p>")
+        if not self._failure_reported:
+            self._failure_reported = True
+            self._logger.error("view=%s load=%s %s", self._name, self._load_id, message)
+            self.previewFailed.emit(self._name, message)
+
+    def _on_renderer_terminated(self, status, exit_code):
+        self._log("renderer_terminated", status=status.name, exit_code=exit_code)
+        if self._awaiting_pdf:
+            self._report_failure("预览进程已退出，请导出日志；可尝试启用软件渲染后重启。", show_in_view=True)
+
+    def _check_preview(self):
+        load_id = self._load_id
+        self._log("preview_deadline", state=self.diagnostic_state())
+        responded = [False]
+
+        def received(snapshot):
+            responded[0] = True
+            if load_id != self._load_id or not self._awaiting_pdf:
+                return
+            self._state["snapshot"] = snapshot
+            self._log("preview_watchdog", state=self.diagnostic_state())
+            if not self._state.get("first_page_rendered"):
+                if self.isVisible():
+                    self._report_failure("PDF 预览长时间未完成，请在引擎配置中导出日志。")
+                else:
+                    self._watchdog.start()  # A hidden view may defer rendering until it is shown.
+
+        self.view.page().runJavaScript(PDFJS_SNAPSHOT_JS, received)
+
+        def no_response():
+            if not responded[0] and load_id == self._load_id and self._awaiting_pdf:
+                self._log("javascript_unresponsive")
+                self._report_failure("预览页面无响应，请在引擎配置中导出日志。")
+
+        QTimer.singleShot(5000, no_response)
+
+    def show_message(self, message):
+        """A translation placeholder is not a pending PDF preview."""
+        self._awaiting_pdf = False
+        self._watchdog.stop()
+        self._state = {"view": self._name, "stage": "message", "message": message}
+        self.view.setHtml("<div style='display:flex;justify-content:center;align-items:center;"
+                          "height:100%;font-size:16px;color:grey;'>" + html.escape(message) + "</div>")
 
     def on_load_finished(self, ok):
         """Injects JS after the page has loaded."""
-        if ok:
+        self._log("html_load_finished", ok=ok)
+        # A false result may belong to a previous navigation that a new import
+        # cancelled. loadingChanged supplies the URL needed to identify failures.
+        if ok and self._awaiting_pdf:
             # Inject CSS to hide unwanted toolbar buttons
             css_to_hide_buttons = """
                 var style = document.createElement('style');
@@ -289,6 +418,8 @@ class PdfJsWidget(QWidget):
 
     def cleanup(self):
         """Clean up resources to prevent memory leaks and shutdown warnings."""
+        self._awaiting_pdf = False
+        self._watchdog.stop()
         if self.view:
             page = self.view.page()
             if page:
@@ -299,11 +430,8 @@ class PdfJsWidget(QWidget):
                     # This happens if it was already disconnected or never connected.
                     pass
                 
-                # The page is parented to the view, which is parented to the widget.
-                # Qt's memory management should handle it, but we call deleteLater
-                # to be explicit and help break cycles.
-                page.deleteLater()
-
-            self.view.setPage(None)
+            # The custom page is parented to the view. Deleting the view destroys
+            # it; setting a null page first can create an unwanted default page.
+            self.view.close()
             self.view.deleteLater()
-            self.view = None 
+            self.view = None

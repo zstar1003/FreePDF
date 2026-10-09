@@ -1,0 +1,58 @@
+name: Windows Release Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+      - name: Run regression tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest tests -q
+      - name: Build application
+        run: pyinstaller build.spec --clean --noconfirm
+      - name: Check packaged preview resources
+        run: |
+          $required = @('web/viewer.html', 'web/viewer.mjs', 'web/viewer.css', 'build/pdf.mjs', 'build/pdf.worker.mjs')
+          foreach ($relative in $required) {
+            if (!(Test-Path "dist/FreePDF/_internal/pdfjs/$relative")) {
+              throw "Missing packaged resource: $relative"
+            }
+          }
+      - name: Build NSIS installer
+        shell: pwsh
+        run: |
+          $makensis = Get-Command makensis -ErrorAction SilentlyContinue
+          if ($makensis) { $compiler = $makensis.Source }
+          else { $compiler = 'C:\Program Files (x86)\NSIS\makensis.exe' }
+          if (!(Test-Path $compiler)) {
+            choco install nsis --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'NSIS installation failed' }
+          }
+          & $compiler installer.nsi
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS compilation failed' }
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: FreePDF-Windows-Installer
+          path: FreePDF_v*.exe
+          if-no-files-found: error
+          retention-days: 14

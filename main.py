@@ -4,11 +4,21 @@ import multiprocessing
 import os
 import sys
 
+from utils.diagnostics import configure_chromium, initialize_logging, install_qt_logging, get_logger
+
+if __name__ == "__main__":
+    # Handle frozen worker startup before preloading modules or opening a log file.
+    multiprocessing.freeze_support()
+    initialize_logging(capture_console=True)
+configure_chromium()
+
 # 追加禁用同源策略和允许 file:// 读取本地资源的标志，确保 PDF.js 能加载 locale/*.ftl
 flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
 extra = " --disable-web-security --allow-file-access-from-files --allow-file-access --lang=zh-CN"
 if extra.strip() not in flags:
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (flags + extra).strip()
+if __name__ == "__main__":
+    get_logger("startup").info("effective Chromium flags=%s", os.environ["QTWEBENGINE_CHROMIUM_FLAGS"])
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -284,6 +294,9 @@ _load_pdf2zh_modules()
 from PyQt6.QtWebEngineCore import QWebEngineProfile  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
+if __name__ == "__main__":
+    install_qt_logging()
+
 from ui.main_window import MainWindow  # noqa: E402
 
 
@@ -297,6 +310,7 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()
 
     app = QApplication(sys.argv)
+    app.aboutToQuit.connect(lambda: get_logger("startup").info("application exiting"))
 
     # 全局字体设置
     try:
@@ -318,8 +332,11 @@ if __name__ == "__main__":
 
     # 设置应用程序属性
     app.setApplicationName("FreePDF")
-    app.setApplicationVersion("5.1.2")
+    app.setApplicationVersion("5.1.3")
     app.setOrganizationName("zstar")
+    for screen in app.screens():
+        get_logger("display").info("screen=%s geometry=%s dpr=%s logical_dpi=%s",
+                                   screen.name(), screen.geometry(), screen.devicePixelRatio(), screen.logicalDotsPerInch())
 
     # 预热WebEngine，提前初始化核心组件
     print("正在预热WebEngine...")

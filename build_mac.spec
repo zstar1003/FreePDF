@@ -130,7 +130,7 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch='arm64',  # 针对Apple Silicon
-    codesign_identity=None,
+    codesign_identity=os.environ.get('SIGN_IDENTITY'),
     entitlements_file='entitlements.plist',
 )
 
@@ -150,14 +150,14 @@ app = BUNDLE(
     name='FreePDF.app',
     icon='ui/logo/logo.icns',
     bundle_identifier='com.zstar.freepdf',
-    version='5.1.2',
+    version='5.1.3',
     info_plist={
         'NSPrincipalClass': 'NSApplication',
         'NSAppleScriptEnabled': False,
         'CFBundleName': 'FreePDF',
         'CFBundleDisplayName': 'FreePDF',
-        'CFBundleVersion': '5.1.2',
-        'CFBundleShortVersionString': '5.1.2',
+        'CFBundleVersion': '5.1.3',
+        'CFBundleShortVersionString': '5.1.3',
         'NSHighResolutionCapable': 'True',
         'LSMinimumSystemVersion': '10.15.0',
         'NSRequiresAquaSystemAppearance': False,

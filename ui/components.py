@@ -5,6 +5,8 @@ import threading
 
 import requests
 
+from utils.diagnostics import register_secrets
+
 try:
     from markdown_it import MarkdownIt
 
@@ -619,6 +621,9 @@ class TranslationConfigDialog(QDialog):
         # 按钮布局
         button_layout = QHBoxLayout()
         button_layout.setContentsMargins(0, 10, 0, 0)
+        diagnostics_btn = QPushButton("诊断与日志…")
+        diagnostics_btn.clicked.connect(self.open_diagnostics)
+        button_layout.addWidget(diagnostics_btn)
         button_layout.addStretch()
 
         # 取消按钮
@@ -673,6 +678,11 @@ class TranslationConfigDialog(QDialog):
         # 初始化显示
         self.on_service_changed(self.service_combo.currentText())
         self.on_qa_service_changed(self.qa_service_combo.currentText())
+
+    def open_diagnostics(self):
+        from ui.diagnostics_dialog import DiagnosticsDialog
+
+        DiagnosticsDialog(self).exec()
 
     def on_qa_service_changed(self, service):
         """问答引擎改变时的处理"""
@@ -877,6 +887,7 @@ class TranslationConfigDialog(QDialog):
             try:
                 with open(config_file, "r", encoding="utf-8") as f:
                     full_config = json.load(f)
+                    register_secrets(full_config)
                     if "translation" in full_config:
                         self.current_config.update(full_config["translation"])
                     if "qa_engine" in full_config:
@@ -975,6 +986,7 @@ class TranslationConfigDialog(QDialog):
         full_config["translation"] = config
         # 更新问答引擎配置部分
         full_config["qa_engine"] = qa_config
+        register_secrets(full_config)
 
         # 确保配置目录存在
         config_dir = os.path.dirname(config_file)
@@ -1200,6 +1212,7 @@ class TranslationConfigDialog(QDialog):
     def _perform_connection_test(
         self, service, url, headers, expect_model=None, is_qa=False
     ):
+        register_secrets(headers)
         # 按钮引用
         btn = self.qa_test_btn if is_qa else self.trans_test_btn
         btn.setEnabled(False)
@@ -1299,7 +1312,7 @@ class TranslationConfigDialog(QDialog):
                     # 确保Content-Type header
                     headers["Content-Type"] = "application/json"
                     print(f"测试自定义翻译API: {custom_url}")
-                    print(f"Headers: {headers}")
+                    # Do not print authentication headers into diagnostic logs.
                     r = requests.post(
                         custom_url, headers=headers, json=payload, timeout=10
                     )

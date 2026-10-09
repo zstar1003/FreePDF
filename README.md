@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <img src="https://img.shields.io/badge/版本-5.1.2-blue" alt="版本">
+  <img src="https://img.shields.io/badge/版本-5.1.3-blue" alt="版本">
   <a href="LICENSE"><img src="https://img.shields.io/badge/许可证-AGPL3.0-green" alt="许可证"></a>
   <h4>
     <a href="README.md">🇨🇳 中文</a>
@@ -26,13 +26,13 @@
 
 - windows：
 
-  - github：[https://github.com/zstar1003/FreePDF/releases/download/v5.1.2/FreePDF_v5.1.2.exe](https://github.com/zstar1003/FreePDF/releases/download/v5.1.2/FreePDF_v5.1.2.exe)
+  - github：[https://github.com/zstar1003/FreePDF/releases/download/v5.1.3/FreePDF_v5.1.3.exe](https://github.com/zstar1003/FreePDF/releases/download/v5.1.3/FreePDF_v5.1.3.exe)
 
   - 夸克网盘：[https://pan.quark.cn/s/ee59aa67b65d](https://pan.quark.cn/s/ee59aa67b65d)
 
 - mac(arm64)：
 
-  - github：[https://github.com/zstar1003/FreePDF/releases/download/v5.1.2/FreePDF_v5.1.2_macOS.dmg](https://github.com/zstar1003/FreePDF/releases/download/v5.1.2/FreePDF_v5.1.2_macOS.dmg)
+  - github：[https://github.com/zstar1003/FreePDF/releases/download/v5.1.3/FreePDF_v5.1.3_macOS.dmg](https://github.com/zstar1003/FreePDF/releases/download/v5.1.3/FreePDF_v5.1.3_macOS.dmg)
 
   - 夸克网盘：[https://pan.quark.cn/s/e96b0c3efc3a](https://pan.quark.cn/s/e96b0c3efc3a)
 

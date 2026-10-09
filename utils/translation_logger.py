@@ -7,6 +7,8 @@ from typing import Callable, Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
+from utils.diagnostics import get_logger, redact
+
 
 class TranslationLogger(QObject):
     """翻译日志管理器 - 单例模式"""
@@ -14,19 +16,10 @@ class TranslationLogger(QObject):
     # 日志更新信号
     log_updated = pyqtSignal(str)  # 新日志消息
 
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-
     def __init__(self):
-        if self._initialized:
-            return
+        # QObject must be initialized before setting Python instance attributes.
+        # The get_translation_logger() accessor owns the singleton.
         super().__init__()
-        self._initialized = True
 
         # 日志存储（最多保留1000条）
         self._logs = deque(maxlen=1000)
@@ -132,11 +125,14 @@ class TranslationLogger(QObject):
 
     def _add_log(self, level: str, message: str):
         """添加日志"""
+        message = redact(message)
         formatted = self._format_log(level, message)
         self._logs.append(formatted)
         self.log_updated.emit(formatted)
-        # 同时打印到控制台
-        print(formatted)
+        # Persistent diagnostics survive clear() and work in windowed Windows builds.
+        import logging
+        severity = {"DEBUG": logging.DEBUG, "WARN": logging.WARNING, "ERROR": logging.ERROR}.get(level, logging.INFO)
+        get_logger("translation").log(severity, message)
 
     def debug(self, message: str):
         """调试日志"""

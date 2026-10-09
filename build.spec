@@ -120,7 +120,7 @@ a = Analysis(
         # 字体文件  
         ('fonts/', 'fonts/'),
         # 渲染器文件  
-        ('pdfjs', '.'),
+        ('pdfjs', 'pdfjs'),
     ],
     hiddenimports=[
         # pdf2zh相关
@@ -207,4 +207,4 @@ coll = COLLECT(
     upx=True,
     upx_exclude=[],
     name='FreePDF',
-) 
+)
