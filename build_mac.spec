@@ -67,6 +67,8 @@ a = Analysis(
         'pdf2zh.doclayout',
 
         # PyQt6相关
+        'PyQt6.QtPdf',
+        'PyQt6.QtPdfWidgets',
         'PyQt6.QtWebEngineWidgets',
         'PyQt6.QtWebEngineCore',
         'PyQt6.QtWebChannel',
@@ -172,14 +174,14 @@ app = BUNDLE(
     name='FreePDF.app',
     icon='ui/logo/logo.icns',
     bundle_identifier='com.zstar.freepdf',
-    version='5.1.3',
+    version='6.0.0',
     info_plist={
         'NSPrincipalClass': 'NSApplication',
         'NSAppleScriptEnabled': False,
         'CFBundleName': 'FreePDF',
         'CFBundleDisplayName': 'FreePDF',
-        'CFBundleVersion': '5.1.3',
-        'CFBundleShortVersionString': '5.1.3',
+        'CFBundleVersion': '6.0.0',
+        'CFBundleShortVersionString': '6.0.0',
         'NSHighResolutionCapable': 'True',
         'LSMinimumSystemVersion': '10.15.0',
         'NSRequiresAquaSystemAppearance': False,

@@ -9,6 +9,7 @@ from utils.diagnostics import configure_chromium, initialize_logging, install_qt
 if __name__ == "__main__":
     # Handle frozen worker startup before preloading modules or opening a log file.
     multiprocessing.freeze_support()
+    sys.modules.setdefault("main", sys.modules[__name__])
     initialize_logging(capture_console=True)
 configure_chromium()
 
@@ -291,7 +292,9 @@ def _load_pdf2zh_modules():
 _load_pdf2zh_modules()
 
 # 安全地导入PyQt6
-from PyQt6.QtWebEngineCore import QWebEngineProfile  # noqa: E402
+from utils.preview_backend import use_native_preview  # noqa: E402
+if not use_native_preview():
+    from PyQt6.QtWebEngineCore import QWebEngineProfile  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 if __name__ == "__main__":
@@ -309,7 +312,15 @@ if __name__ == "__main__":
     # 配置多进程支持
     multiprocessing.freeze_support()
 
+    from PyQt6.QtCore import QCoreApplication, Qt
+    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
     app = QApplication(sys.argv)
+    from utils.resources import application_icon
+    from ui.theme import install_theme
+    install_theme(app)
+    app.setWindowIcon(application_icon())
+    from utils.resources import resource_path
+    get_logger("startup").info("application icon=%s null=%s", resource_path("ui/logo/logo.png"), app.windowIcon().isNull())
     app.aboutToQuit.connect(lambda: get_logger("startup").info("application exiting"))
 
     # 全局字体设置
@@ -332,24 +343,62 @@ if __name__ == "__main__":
 
     # 设置应用程序属性
     app.setApplicationName("FreePDF")
-    app.setApplicationVersion("5.1.3")
+    from utils.version import VERSION
+    app.setApplicationVersion(VERSION)
     app.setOrganizationName("zstar")
     for screen in app.screens():
         get_logger("display").info("screen=%s geometry=%s dpr=%s logical_dpi=%s",
                                    screen.name(), screen.geometry(), screen.devicePixelRatio(), screen.logicalDotsPerInch())
 
-    # 预热WebEngine，提前初始化核心组件
-    print("正在预热WebEngine...")
-    profile = QWebEngineProfile.defaultProfile()
-    profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.MemoryHttpCache)
-    profile.setPersistentCookiesPolicy(
-        QWebEngineProfile.PersistentCookiesPolicy.NoPersistentCookies
-    )
-    print("WebEngine核心组件预热完成")
+    if not use_native_preview():
+        profile = QWebEngineProfile.defaultProfile()
+        profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.MemoryHttpCache)
+        profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.NoPersistentCookies)
+    get_logger("startup").info("preview backend=%s", "qt_pdf" if use_native_preview() else "webengine_with_native_recovery")
 
     # 创建主窗口
     window = MainWindow()
     window.showMaximized()
 
+    if "--preview-smoke" in sys.argv:
+        from PyQt6.QtCore import QTimer
+        pdf_path = sys.argv[sys.argv.index("--preview-smoke") + 1]
+        window._is_translation_enabled = lambda: False
+        window._update_qa_panel_status = lambda: None
+        window.load_pdf_file(pdf_path)
+        timer = QTimer(window)
+        timer.setInterval(100)
+        def verify_packaged_preview():
+            states = [widget.diagnostic_state() for widget in (window.left_pdf_widget, window.right_pdf_widget)]
+            if all(state.get("first_page_rendered") for state in states):
+                if window.windowIcon().isNull() or app.windowIcon().isNull():
+                    get_logger("startup").error("packaged_icon_missing")
+                    app.exit(2)
+                    return
+                get_logger("startup").info("packaged_preview_verified states=%s", states)
+                screenshot = os.environ.get("FREEPDF_SMOKE_SCREENSHOT")
+                if screenshot:
+                    window.grab().save(screenshot)
+                timer.stop()
+                for widget in (window.left_pdf_widget, window.right_pdf_widget):
+                    widget.cleanup()
+                # Let deferred browser/page destruction finish while its profile
+                # and Qt event loop still exist.
+                QTimer.singleShot(100, lambda: app.exit(0))
+        timer.timeout.connect(verify_packaged_preview)
+        timer.start()
+        QTimer.singleShot(45000, lambda: app.exit(3))
+
     # 运行应用程序
-    sys.exit(app.exec())
+    exit_code = app.exec()
+    # Destroy widgets/profiles while QApplication is still alive. Letting SIP
+    # choose their order at Python shutdown can leave WebEngine GPU callbacks
+    # referring to an already destroyed Qt object on macOS.
+    from PyQt6 import sip
+    from PyQt6.QtCore import QEvent
+    for widget in (window.left_pdf_widget, window.right_pdf_widget):
+        widget.cleanup()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    sip.delete(window)
+    sip.delete(app)
+    sys.exit(exit_code)

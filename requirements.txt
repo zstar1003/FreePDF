@@ -70,7 +70,7 @@ opencv-python-headless==4.11.0.86
 orjson==3.10.18
 packaging==25.0
 pandas==2.3.0
-pdf2zh==1.9.10
+pdf2zh==1.9.11
 pdfminer-six==20250416
 peewee==3.18.1
 pefile==2023.2.7

@@ -4,6 +4,18 @@ import os
 import sys
 
 
+def application_data_dir():
+    from pathlib import Path
+    override = os.environ.get("FREEPDF_DATA_DIR")
+    if override:
+        return Path(override)
+    if sys.platform == "darwin":
+        return Path.home() / "Library/Application Support/FreePDF"
+    if sys.platform == "win32":
+        return Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData/Local"))) / "FreePDF"
+    return Path.home() / ".config/FreePDF"
+
+
 def get_config_file_path():
     """
     获取配置文件路径
@@ -11,14 +23,8 @@ def get_config_file_path():
     在打包环境中,配置文件应保存到用户目录的可写位置
     在开发环境中,使用当前目录
     """
-    if getattr(sys, "frozen", False):
-        # 打包后的环境,使用用户主目录下的应用数据目录
-        if sys.platform == "darwin":  # macOS
-            config_dir = os.path.expanduser("~/Library/Application Support/FreePDF")
-        elif sys.platform == "win32":  # Windows
-            config_dir = os.path.expanduser("~/AppData/Local/FreePDF")
-        else:  # Linux
-            config_dir = os.path.expanduser("~/.config/FreePDF")
+    if getattr(sys, "frozen", False) or os.environ.get("FREEPDF_DATA_DIR"):
+        config_dir = str(application_data_dir())
 
         # 确保目录存在
         os.makedirs(config_dir, exist_ok=True)

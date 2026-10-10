@@ -31,14 +31,14 @@ jobs:
         run: python -m pytest tests -q
       - name: Build application
         run: pyinstaller build.spec --clean --noconfirm
-      - name: Check packaged preview resources
+      - name: Check native preview dependencies and icon
+        shell: pwsh
         run: |
-          $required = @('web/viewer.html', 'web/viewer.mjs', 'web/viewer.css', 'build/pdf.mjs', 'build/pdf.worker.mjs')
+          $required = @('PyQt6/Qt6/bin/Qt6Pdf.dll', 'PyQt6/Qt6/bin/Qt6PdfWidgets.dll', 'ui/logo/logo.png')
           foreach ($relative in $required) {
-            if (!(Test-Path "dist/FreePDF/_internal/pdfjs/$relative")) {
-              throw "Missing packaged resource: $relative"
-            }
+            if (!(Test-Path "dist/FreePDF/_internal/$relative")) { throw "Missing packaged resource: $relative" }
           }
+          if (Get-ChildItem dist/FreePDF -Recurse -Filter '*WebEngine*') { throw 'Windows package unexpectedly depends on WebEngine' }
       - name: Check packaged startup
         run: python tools/smoke_frozen.py dist/FreePDF/FreePDF.exe
       - name: Build NSIS installer
@@ -53,6 +53,15 @@ jobs:
           }
           & $compiler installer.nsi
           if ($LASTEXITCODE -ne 0) { throw 'NSIS compilation failed' }
+      - name: Check installed application from a path containing spaces
+        shell: pwsh
+        run: |
+          $installer = (Get-Item FreePDF_v*.exe).FullName
+          $target = Join-Path $env:RUNNER_TEMP 'Free PDF Installed/FreePDF'
+          $process = Start-Process $installer -ArgumentList @('/S', "/D=$target") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'Installer failed' }
+          python tools/smoke_frozen.py "$target/FreePDF.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed PDF rendering failed' }
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:

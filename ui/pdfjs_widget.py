@@ -225,7 +225,7 @@ class PdfJsWidget(QWidget):
             self._log("resource_check", candidates=checks)
         except OSError:
             self._logger.exception("view=%s load=%s PDF/resource access failed", self._name, self._load_id)
-            self._report_failure("无法读取 PDF 或缺少预览资源，请在引擎配置中导出日志。", show_in_view=True)
+            self._report_failure("无法读取 PDF 或缺少预览资源，请在关于软件中导出日志。", show_in_view=True)
             return
         viewer_url = build_viewer_url(viewer_path, QUrl.fromLocalFile(pdf_file_path), self._locale)
         self._state["viewer_url"] = viewer_url.toString(QUrl.ComponentFormattingOption.FullyEncoded)
@@ -247,7 +247,7 @@ class PdfJsWidget(QWidget):
                   error_domain=info.errorDomain().name, error=info.errorString(), url=info.url().toString())
         if (self._awaiting_pdf and info.status().name == "LoadFailedStatus"
                 and info.url().toString(QUrl.ComponentFormattingOption.FullyEncoded) == self._state.get("viewer_url")):
-            self._report_failure("预览页面加载失败，请在引擎配置中导出日志。")
+            self._report_failure("预览页面加载失败，请在关于软件中导出日志。")
 
     def _on_diagnostic_event(self, payload):
         if not self._awaiting_pdf or payload.get("load_id") != self._load_id:
@@ -275,7 +275,7 @@ class PdfJsWidget(QWidget):
             self._state["last_error"] = payload.get("message")
             # Record JS errors immediately; the watchdog determines whether preview is actually stalled.
             if event in ("document_error", "page_render_error"):
-                self._report_failure("PDF 预览失败，请在引擎配置中导出日志。")
+                self._report_failure("PDF 预览失败，请在关于软件中导出日志。")
 
     def _report_failure(self, message, show_in_view=False):
         self._watchdog.stop()
@@ -306,7 +306,7 @@ class PdfJsWidget(QWidget):
             self._log("preview_watchdog", state=self.diagnostic_state())
             if not self._state.get("first_page_rendered"):
                 if self.isVisible():
-                    self._report_failure("PDF 预览长时间未完成，请在引擎配置中导出日志。")
+                    self._report_failure("PDF 预览长时间未完成，请在关于软件中导出日志。")
                 else:
                     self._watchdog.start()  # A hidden view may defer rendering until it is shown.
 
@@ -315,7 +315,7 @@ class PdfJsWidget(QWidget):
         def no_response():
             if not responded[0] and load_id == self._load_id and self._awaiting_pdf:
                 self._log("javascript_unresponsive")
-                self._report_failure("预览页面无响应，请在引擎配置中导出日志。")
+                self._report_failure("预览页面无响应，请在关于软件中导出日志。")
 
         QTimer.singleShot(5000, no_response)
 
@@ -349,6 +349,13 @@ class PdfJsWidget(QWidget):
                     #editorStampAddImage {
                         display: none !important;
                     }
+                    :root { --toolbar-bg-color: #f3f7f7; --body-bg-color: #eef3f5; }
+                    #toolbarContainer, #toolbarViewer { background: #f3f7f7; }
+                    #toolbarViewer { color: #19343e; font-size: 14px; }
+                    .toolbarButton { border-radius: 6px; }
+                    .toolbarButton:hover { background-color: #dcefeb; }
+                    .toolbarField, select { font-size: 14px; }
+
                 `;
                 document.head.appendChild(style);
             """
@@ -432,6 +439,6 @@ class PdfJsWidget(QWidget):
                 
             # The custom page is parented to the view. Deleting the view destroys
             # it; setting a null page first can create an unwanted default page.
-            self.view.close()
+            self.view.hide()
             self.view.deleteLater()
             self.view = None

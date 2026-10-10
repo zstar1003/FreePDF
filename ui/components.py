@@ -138,7 +138,7 @@ class LoadingWidget(QWidget):
         self.setStyleSheet("""
             QWidget {
                 background-color: rgba(255, 255, 255, 0.98);
-                border: 2px solid #007acc;
+                border: 2px solid #126d66;
                 border-radius: 15px;
             }
         """)
@@ -204,7 +204,7 @@ class LoadingWidget(QWidget):
             QProgressBar::chunk {
                 background: qlineargradient(
                     x1: 0, y1: 0, x2: 1, y2: 0,
-                    stop: 0 #007acc, stop: 0.5 #4fc3f7, stop: 1 #007acc
+                    stop: 0 #126d66, stop: 0.5 #4fc3f7, stop: 1 #126d66
                 );
                 border-radius: 3px;
             }
@@ -288,7 +288,7 @@ class StatusLabel(QLabel):
         self.setStyleSheet("""
             QLabel {
                 color: #666;
-                font-size: 12px;
+                font-size: 14px;
                 padding: 5px;
                 background-color: #f8f9fa;
                 border: 1px solid #dee2e6;
@@ -302,17 +302,17 @@ class StatusLabel(QLabel):
         status_type: info, success, warning, error
         """
         colors = {
-            "info": "#007acc",
+            "info": "#126d66",
             "success": "#28a745",
             "warning": "#ffc107",
             "error": "#dc3545",
         }
 
-        color = colors.get(status_type, "#007acc")
+        color = colors.get(status_type, "#126d66")
         self.setStyleSheet(f"""
             QLabel {{
                 color: {color};
-                font-size: 12px;
+                font-size: 14px;
                 padding: 5px;
                 background-color: #f8f9fa;
                 border: 1px solid #dee2e6;
@@ -336,11 +336,11 @@ class DragDropOverlay(QWidget):
         self.setStyleSheet("""
             QWidget {
                 background: rgba(0, 122, 204, 0.15);
-                border: 3px dashed #007acc;
+                border: 3px dashed #126d66;
                 border-radius: 15px;
             }
             QLabel {
-                color: #007acc;
+                color: #126d66;
                 font-size: 24px;
                 font-weight: bold;
                 background: transparent;
@@ -467,11 +467,11 @@ class TranslationConfigDialog(QDialog):
             QComboBox QAbstractItemView {
                 min-width: 200px;
                 border: 1px solid #ccc;
-                selection-background-color: #007acc;
+                selection-background-color: #126d66;
                 selection-color: white;
             }
             QComboBox:focus, QLineEdit:focus {
-                border-color: #007acc;
+                border-color: #126d66;
             }
             QComboBox:hover, QLineEdit:hover {
                 border-color: #999;
@@ -488,7 +488,7 @@ class TranslationConfigDialog(QDialog):
             QLabel {
                 font-size: 18px;
                 font-weight: bold;
-                color: #007acc;
+                color: #126d66;
                 padding: 10px 0;
                 border-bottom: 1px solid #ddd;
                 margin-bottom: 5px;
@@ -621,9 +621,6 @@ class TranslationConfigDialog(QDialog):
         # 按钮布局
         button_layout = QHBoxLayout()
         button_layout.setContentsMargins(0, 10, 0, 0)
-        diagnostics_btn = QPushButton("诊断与日志…")
-        diagnostics_btn.clicked.connect(self.open_diagnostics)
-        button_layout.addWidget(diagnostics_btn)
         button_layout.addStretch()
 
         # 取消按钮
@@ -655,7 +652,7 @@ class TranslationConfigDialog(QDialog):
         ok_btn = QPushButton("确定")
         ok_btn.setStyleSheet("""
             QPushButton {
-                background-color: #007acc;
+                background-color: #126d66;
                 color: white;
                 border: none;
                 padding: 8px 20px;
@@ -664,7 +661,7 @@ class TranslationConfigDialog(QDialog):
                 min-width: 80px;
             }
             QPushButton:hover {
-                background-color: #005a9e;
+                background-color: #126d66;
             }
             QPushButton:pressed {
                 background-color: #004085;
@@ -703,7 +700,7 @@ class TranslationConfigDialog(QDialog):
             self.qa_test_btn.clicked.connect(self._test_qa_connection)
             self.qa_test_btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #17a2b8;
+                    background-color: #126d66;
                     color: white;
                     border: none;
                     padding: 6px 18px;
@@ -732,7 +729,7 @@ class TranslationConfigDialog(QDialog):
             self.qa_test_btn.clicked.connect(self._test_qa_connection)
             self.qa_test_btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #17a2b8;
+                    background-color: #126d66;
                     color: white;
                     border: none;
                     padding: 6px 18px;
@@ -761,7 +758,7 @@ class TranslationConfigDialog(QDialog):
             self.qa_test_btn.clicked.connect(self._test_qa_connection)
             self.qa_test_btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #17a2b8;
+                    background-color: #126d66;
                     color: white;
                     border: none;
                     padding: 6px 18px;
@@ -845,7 +842,7 @@ class TranslationConfigDialog(QDialog):
         self.trans_test_btn = QPushButton("测试连接")
         self.trans_test_btn.setStyleSheet("""
             QPushButton {
-                background-color: #17a2b8;
+                background-color: #126d66;
                 color: white;
                 border: none;
                 padding: 6px 18px;
@@ -1447,7 +1444,7 @@ class QADialog(QDialog):
         self.question_input.setMaximumHeight(120)
         self.question_input.setStyleSheet("""
             QTextEdit {
-                border: 2px solid #007acc;
+                border: 2px solid #126d66;
                 border-radius: 8px;
                 padding: 10px;
                 font-size: 14px;
@@ -1487,7 +1484,7 @@ class QADialog(QDialog):
         self.send_btn = QPushButton("发送问题")
         self.send_btn.setStyleSheet("""
             QPushButton {
-                background-color: #007acc;
+                background-color: #126d66;
                 color: white;
                 border: none;
                 padding: 10px 30px;
@@ -1513,7 +1510,7 @@ class QADialog(QDialog):
         self.status_label.setStyleSheet("""
             QLabel {
                 color: #6c757d;
-                font-size: 12px;
+                font-size: 14px;
                 padding: 5px;
             }
         """)
@@ -1536,10 +1533,10 @@ class QADialog(QDialog):
 
         if sender == "用户":
             html = f"""<div style="margin-bottom: 15px;">
-                <div style="color: #007acc; font-weight: bold; margin-bottom: 5px;">
+                <div style="color: #126d66; font-weight: bold; margin-bottom: 5px;">
                     👤 {sender} [{timestamp}]
                 </div>
-                <div style="background-color: #e3f2fd; padding: 10px; border-radius: 8px; border-left: 4px solid #007acc;">
+                <div style="background-color: #e3f2fd; padding: 10px; border-radius: 8px; border-left: 4px solid #126d66;">
                     {message}
                 </div>
             </div>"""
@@ -1757,10 +1754,10 @@ class EmbeddedQAWidget(QWidget):
         self.question_input.setMaximumHeight(80)
         self.question_input.setStyleSheet("""
             QTextEdit {
-                border: 2px solid #007acc;
+                border: 2px solid #126d66;
                 border-radius: 6px;
                 padding: 8px;
-                font-size: 13px;
+                font-size: 14px;
                 background-color: white;
             }
             QTextEdit:focus {
@@ -1777,7 +1774,7 @@ class EmbeddedQAWidget(QWidget):
 
         # QA配置按钮（放在原来清空按钮的位置）
         config_btn = QPushButton("配置")
-        config_btn.setFixedSize(50, 28)
+        config_btn.setMinimumSize(78, 38)
         config_btn.setStyleSheet("""
             QPushButton {
                 background-color: #28a745;
@@ -1785,7 +1782,7 @@ class EmbeddedQAWidget(QWidget):
                 border: none;
                 padding: 4px 8px;
                 border-radius: 4px;
-                font-size: 12px;
+                font-size: 14px;
                 font-weight: bold;
             }
             QPushButton:hover {
@@ -1799,7 +1796,7 @@ class EmbeddedQAWidget(QWidget):
 
         # 清空对话按钮（移到发送按钮左边）
         clear_btn = QPushButton("清空")
-        clear_btn.setFixedSize(50, 28)
+        clear_btn.setMinimumSize(78, 38)
         clear_btn.setStyleSheet("""
             QPushButton {
                 background-color: #6c757d;
@@ -1807,7 +1804,7 @@ class EmbeddedQAWidget(QWidget):
                 border: none;
                 padding: 4px 8px;
                 border-radius: 4px;
-                font-size: 12px;
+                font-size: 14px;
                 font-weight: bold;
             }
             QPushButton:hover {
@@ -1822,16 +1819,16 @@ class EmbeddedQAWidget(QWidget):
 
         # 发送按钮
         self.send_btn = QPushButton("发送")
-        self.send_btn.setFixedSize(60, 28)
+        self.send_btn.setMinimumSize(78, 38)
         self.send_btn.setStyleSheet("""
             QPushButton {
-                background-color: #007acc;
+                background-color: #126d66;
                 color: white;
                 border: none;
                 padding: 4px 8px;
                 border-radius: 4px;
                 font-weight: bold;
-                font-size: 12px;
+                font-size: 14px;
             }
             QPushButton:hover {
                 background-color: #0056b3;
@@ -1854,7 +1851,7 @@ class EmbeddedQAWidget(QWidget):
                 padding: 4px 8px;
                 border-radius: 4px;
                 font-weight: bold;
-                font-size: 12px;
+                font-size: 14px;
             }
             QPushButton:hover {
                 background-color: #c82333;
@@ -2058,19 +2055,19 @@ class EmbeddedQAWidget(QWidget):
             # 为代码块添加内联样式
             html = re.sub(
                 r"<pre><code>",
-                '<pre style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 4px; padding: 12px; overflow-x: auto; font-family: Consolas, Monaco, monospace; font-size: 13px;"><code>',
+                '<pre style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 4px; padding: 12px; overflow-x: auto; font-family: Consolas, Monaco, monospace; font-size: 14px;"><code>',
                 html,
             )
             html = re.sub(
                 r"<code>",
-                '<code style="background-color: #f8f9fa; padding: 2px 4px; border-radius: 3px; font-family: Consolas, Monaco, monospace; font-size: 13px;">',
+                '<code style="background-color: #f8f9fa; padding: 2px 4px; border-radius: 3px; font-family: Consolas, Monaco, monospace; font-size: 14px;">',
                 html,
             )
 
             # 为引用添加内联样式
             html = re.sub(
                 r"<blockquote>",
-                '<blockquote style="border-left: 4px solid #007acc; margin: 16px 0; padding-left: 16px; color: #6c757d; font-style: italic;">',
+                '<blockquote style="border-left: 4px solid #126d66; margin: 16px 0; padding-left: 16px; color: #6c757d; font-style: italic;">',
                 html,
             )
 
@@ -2263,17 +2260,17 @@ class EmbeddedQAWidget(QWidget):
                     padding: 12px;
                     overflow-x: auto;
                     font-family: 'Consolas', 'Monaco', monospace;
-                    font-size: 13px;
+                    font-size: 14px;
                 }}
                 code {{
                     background-color: #f8f9fa;
                     padding: 2px 4px;
                     border-radius: 3px;
                     font-family: 'Consolas', 'Monaco', monospace;
-                    font-size: 13px;
+                    font-size: 14px;
                 }}
                 blockquote {{
-                    border-left: 4px solid #007acc;
+                    border-left: 4px solid #126d66;
                     margin: 16px 0;
                     padding-left: 16px;
                     color: #6c757d;
@@ -2392,7 +2389,7 @@ class EmbeddedQAWidget(QWidget):
 
         # 构建消息样式
         if sender == "用户":
-            color = "#007acc"
+            color = "#126d66"
         elif sender == "AI助手":
             color = "#28a745"
         else:

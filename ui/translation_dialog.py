@@ -53,29 +53,29 @@ class TranslationSettingsDialog(QDialog):
             }
             QLabel {
                 color: #333;
-                font-size: 12px;
+                font-size: 14px;
             }
             QCheckBox, QRadioButton {
                 color: #333;
-                font-size: 12px;
+                font-size: 14px;
                 spacing: 8px;
             }
             QLineEdit {
                 border: 1px solid #ddd;
                 border-radius: 3px;
                 padding: 6px;
-                font-size: 12px;
+                font-size: 14px;
                 background-color: white;
             }
             QLineEdit:focus {
-                border-color: #007acc;
+                border-color: #126d66;
             }
             QLineEdit:disabled {
                 background-color: #f8f9fa;
                 color: #6c757d;
             }
             QPushButton {
-                background-color: #007acc;
+                background-color: #126d66;
                 color: white;
                 border: none;
                 padding: 8px 20px;
@@ -120,11 +120,11 @@ class TranslationSettingsDialog(QDialog):
         self.enable_translation.setChecked(True)
         basic_layout.addWidget(self.enable_translation)
 
-        # 是否保存双语对照文件
-        self.save_dual_file = QCheckBox("保存双语对照文件")
+        # 是否同时保存左右对照 PDF
+        self.save_dual_file = QCheckBox("同时保存左右对照 PDF")
         self.save_dual_file.setChecked(False)  # 默认不勾选
         self.save_dual_file.setToolTip(
-            "勾选后将保留包含原文和译文的双语对照PDF文件（dual.pdf），不勾选则自动删除"
+            "自动保留逐页左右对照的 PDF；译文始终保存在本地，也可随时使用导出按钮。"
         )
         basic_layout.addWidget(self.save_dual_file)
 
@@ -207,7 +207,7 @@ class TranslationSettingsDialog(QDialog):
                 padding: 10px 20px;
                 border-radius: 6px;
                 font-weight: bold;
-                font-size: 12px;
+                font-size: 14px;
                 min-width: 80px;
             }
             QPushButton:hover {
@@ -232,7 +232,7 @@ class TranslationSettingsDialog(QDialog):
                 padding: 10px 20px;
                 border-radius: 6px;
                 font-weight: bold;
-                font-size: 12px;
+                font-size: 14px;
                 min-width: 80px;
             }
             QPushButton:hover {
@@ -249,17 +249,17 @@ class TranslationSettingsDialog(QDialog):
         save_btn = QPushButton("保存")
         save_btn.setStyleSheet("""
             QPushButton {
-                background-color: #007acc;
+                background-color: #126d66;
                 color: white;
                 border: none;
                 padding: 10px 20px;
                 border-radius: 6px;
                 font-weight: bold;
-                font-size: 12px;
+                font-size: 14px;
                 min-width: 80px;
             }
             QPushButton:hover {
-                background-color: #005a9e;
+                background-color: #126d66;
             }
             QPushButton:pressed {
                 background-color: #004a82;

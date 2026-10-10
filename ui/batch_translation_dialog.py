@@ -129,45 +129,45 @@ class BatchTranslationDialog(QDialog):
             }
             QLabel {
                 color: #333;
-                font-size: 12px;
+                font-size: 14px;
             }
             QLineEdit {
                 border: 1px solid #ddd;
                 border-radius: 3px;
                 padding: 6px;
-                font-size: 12px;
+                font-size: 14px;
                 background-color: #fafafa;
             }
             QLineEdit:focus {
-                border-color: #007acc;
+                border-color: #126d66;
                 background-color: #ffffff;
             }
             QComboBox {
                 border: 1px solid #ddd;
                 border-radius: 3px;
                 padding: 6px;
-                font-size: 12px;
+                font-size: 14px;
                 background-color: #fafafa;
             }
             QComboBox:focus {
-                border-color: #007acc;
+                border-color: #126d66;
                 background-color: #ffffff;
             }
             QTextEdit {
                 border: 1px solid #ddd;
                 border-radius: 3px;
                 padding: 6px;
-                font-size: 12px;
+                font-size: 14px;
                 background-color: #fafafa;
             }
             QListWidget {
                 border: 1px solid #ddd;
                 border-radius: 3px;
                 background-color: #fafafa;
-                font-size: 12px;
+                font-size: 14px;
             }
             QPushButton {
-                background-color: #007acc;
+                background-color: #126d66;
                 color: white;
                 border: none;
                 padding: 8px 20px;
@@ -226,7 +226,7 @@ class BatchTranslationDialog(QDialog):
             QLabel {
                 font-size: 18px;
                 font-weight: bold;
-                color: #007acc;
+                color: #126d66;
                 padding: 10px 0;
                 border-bottom: 1px solid #ddd;
                 margin-bottom: 5px;
@@ -310,7 +310,7 @@ class BatchTranslationDialog(QDialog):
 
         self.current_file_label = QLabel("")
         self.current_file_label.setVisible(False)
-        self.current_file_label.setStyleSheet("color: #007acc; font-weight: bold;")
+        self.current_file_label.setStyleSheet("color: #126d66; font-weight: bold;")
         progress_layout.addWidget(self.current_file_label)
 
         # 移除结果显示框

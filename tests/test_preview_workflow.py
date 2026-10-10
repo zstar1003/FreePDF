@@ -7,7 +7,7 @@ import pymupdf
 from PyQt6.QtCore import QCoreApplication, QEvent, QEventLoop
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
-from ui.diagnostics_dialog import DiagnosticsDialog
+from ui.main_window import AboutDialog
 from ui.main_window import MainWindow
 from utils import diagnostics
 
@@ -41,7 +41,7 @@ def test_dual_preview_workflow_exports_both_views_and_preserves_errors(app, tmp_
     destination = tmp_path / "dual-preview.zip"
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *args: (str(destination), "ZIP"))
     monkeypatch.setattr(QMessageBox, "information", lambda *args: None)
-    DiagnosticsDialog(window)._export()
+    AboutDialog(window).export_logs()
     with zipfile.ZipFile(destination) as archive:
         state = json.loads(archive.read("preview_state.json"))
         assert state["left"]["first_page_rendered"] and state["right"]["first_page_rendered"]

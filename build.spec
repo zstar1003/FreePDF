@@ -116,7 +116,7 @@ a = Analysis(
         # 配置文件
         ('pdf2zh_config.json', '.'),
         # ui文件
-        ('ui', '.'),
+        ('ui', 'ui'),
         # 模型文件
         ('models/', 'models/'),
         # 字体文件  
@@ -132,9 +132,8 @@ a = Analysis(
         'pdf2zh.doclayout',
         
         # PyQt6相关
-        'PyQt6.QtWebEngineWidgets',
-        'PyQt6.QtWebEngineCore', 
-        'PyQt6.QtWebChannel',
+        'PyQt6.QtPdf',
+        'PyQt6.QtPdfWidgets',
         'PyQt6.QtCore',
         'PyQt6.QtGui',
         'PyQt6.QtWidgets',
@@ -171,7 +170,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[os.path.join(current_dir, 'diagnostics_hook.py'), os.path.join(current_dir, 'onnxruntime_hook.py')],
-    excludes=[],
+    excludes=['PyQt6.QtWebEngineCore', 'PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebEngineQuick', 'PyQt6.QtWebChannel'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -180,7 +179,7 @@ a = Analysis(
 
 
 # Retain installed component versions in exported support diagnostics.
-for package in ('PyQt6', 'PyQt6-Qt6', 'PyQt6-WebEngine', 'PyQt6-WebEngine-Qt6', 'PyMuPDF', 'pdf2zh', 'pyinstaller'):
+for package in ('PyQt6', 'PyQt6-Qt6', 'PyMuPDF', 'pdf2zh', 'pyinstaller'):
     a.datas += [(destination, source, 'DATA') for destination, source in format_binaries_and_datas(copy_metadata(package))]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)

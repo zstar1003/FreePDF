@@ -7,11 +7,10 @@ import uuid
 import requests
 
 # 应用版本信息
-__version__ = "5.1.3"
+from utils.version import VERSION as __version__
 
 from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon
-from PyQt6.QtWebEngineCore import QWebEngineDownloadRequest, QWebEngineProfile
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -40,7 +39,11 @@ from ui.components import (
     StatusLabel,
     TranslationConfigDialog,
 )
-from ui.pdfjs_widget import PdfJsWidget  # Use the new widget
+from ui.pdf_preview_widget import PdfPreviewWidget
+from utils.preview_backend import use_native_preview
+from utils.resources import application_icon, resource_path
+from ui.theme import polish_window, style_button
+from ui.export_dialog import ExportDialog
 from utils.config_path import get_config_file_path
 from utils.diagnostics import get_logger
 
@@ -51,12 +54,14 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("FreePDF")
-        self.setWindowIcon(QIcon("ui/logo/logo.ico"))
+        self.setWindowIcon(application_icon())
+        self.setMinimumSize(1080, 720)
         self.setGeometry(100, 100, 1600, 900)
 
         self.setAcceptDrops(True)
 
         self.current_file = None
+        self.translated_file = None
         self._preview_failures = {}
         self._import_id = None
         self._diagnostics = get_logger("workflow")
@@ -67,15 +72,13 @@ class MainWindow(QMainWindow):
         self.qa_panel_visible = True
         self._components_ready = False  # 标记组件是否完全就绪
 
-        # Use an off-the-record (incognito) profile by creating a QWebEngineProfile
-        # without a persistent storage name.
-        self.web_profile = QWebEngineProfile(self)
-        
-        # 启用本地文件访问权限（解决打包后无法访问PDF文件的问题）
-        settings = self.web_profile.settings()
-        from PyQt6.QtWebEngineCore import QWebEngineSettings
-        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
+        self.web_profile = None
+        if not use_native_preview():
+            from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings
+            self.web_profile = QWebEngineProfile(self)
+            settings = self.web_profile.settings()
+            settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
+            settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
 
         self.drag_overlay = DragDropOverlay(self)
         self.qa_dialog = QADialog(self)  # Keep for compatibility if needed
@@ -84,6 +87,7 @@ class MainWindow(QMainWindow):
         self.setup_ui()
         self.setup_status_bar()
         self.setup_connections()
+        polish_window(self)
 
         # 设置备用定时器，确保拖拽功能最终能启用
         self._setup_fallback_timer()
@@ -97,184 +101,51 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
 
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(5, 5, 5, 5)
-        main_layout.setSpacing(5)
+        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.setSpacing(8)
 
         toolbar_layout = QHBoxLayout()
-        toolbar_layout.setContentsMargins(0, 0, 0, 0)  # 减少外边距
-        toolbar_layout.setSpacing(10)  # 控制元素间距
-
-        # 文件操作按钮
-        self.open_btn = QPushButton("打开PDF文件")
-        self.open_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #005a9e;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #003e6b;
-            }
-        """)
-        toolbar_layout.addWidget(self.open_btn)
-
-        # 翻译配置按钮
-        self.translation_config_btn = QPushButton("翻译配置")
-        self.translation_config_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #005a9e;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #003e6b;
-            }
-        """)
-        toolbar_layout.addWidget(self.translation_config_btn)
-
-        # 配置按钮
-        self.config_btn = QPushButton("引擎配置")
-        self.config_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #005a9e;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #003e6b;
-            }
-        """)
-        toolbar_layout.addWidget(self.config_btn)
-
-        # 滚动同步按钮
-        self.sync_btn = QPushButton("关闭滚动同步")
-        self.sync_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #005a9e;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #003e6b;
-            }
-        """)
-        toolbar_layout.addWidget(self.sync_btn)
-
-        # 视图切换下拉框
+        toolbar_layout.setContentsMargins(0, 0, 0, 0)
+        toolbar_layout.setSpacing(8)
+        for attribute, label, icon, primary in (
+            ("open_btn", "打开PDF文件", "open", True),
+            ("translation_config_btn", "翻译配置", "settings", False),
+            ("config_btn", "引擎配置", "settings", False),
+            ("sync_btn", "关闭滚动同步", "sync", False),
+        ):
+            button = QPushButton(label)
+            style_button(button, icon, primary)
+            setattr(self, attribute, button)
+            toolbar_layout.addWidget(button)
         self.view_mode_combo = QComboBox()
         self.view_mode_combo.addItems(["双视图", "仅原文", "仅译文"])
-        self.view_mode_combo.setCurrentIndex(0)
-        self.view_mode_combo.setStyleSheet("""
-            QComboBox {
-                background-color: #005a9e;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 8px 16px;
-                font-weight: bold;
-            }
-            QComboBox:hover {
-                background-color: #003e6b;
-            }
-            QComboBox::drop-down {
-                width: 0px;
-                border: none;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                width: 0px;
-                height: 0px;
-            }
-        """)
-        # 设置下拉菜单最小宽度
-        self.view_mode_combo.view().setMinimumWidth(100)
         self.view_mode_combo.currentIndexChanged.connect(self.on_view_mode_changed)
         toolbar_layout.addWidget(self.view_mode_combo)
-
+        self.export_btn = QPushButton("导出 PDF")
+        self.export_btn.setEnabled(False)
+        style_button(self.export_btn, "export")
+        self.export_btn.clicked.connect(self.export_current_pdf)
+        toolbar_layout.addWidget(self.export_btn)
         toolbar_layout.addStretch()
-
-        # 批量翻译按钮
         self.batch_translate_btn = QPushButton("批量翻译")
-        self.batch_translate_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ff8c00;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #e07b00;
-            }
-        """)
+        style_button(self.batch_translate_btn, "batch")
         self.batch_translate_btn.clicked.connect(self.open_batch_translate)
         toolbar_layout.addWidget(self.batch_translate_btn)
-
-        # 关于软件按钮
         self.about_btn = QPushButton("关于软件")
-        self.about_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #17a2b8;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #138496;
-            }
-        """)
+        style_button(self.about_btn, "about")
         toolbar_layout.addWidget(self.about_btn)
-
-        # 智能问答按钮 - 放到最右边，默认显示状态
         self.qa_btn = QPushButton("关闭问答")
-        self.qa_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #17a2b8;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #138496;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-                color: #666666;
-            }
-        """)
+        style_button(self.qa_btn, "chat")
         toolbar_layout.addWidget(self.qa_btn)
-
         main_layout.addLayout(toolbar_layout)
 
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
 
         # Left panel (Original PDF)
         self.left_frame = QFrame()
+        self.left_frame.setObjectName("documentPanel")
         self.left_frame.setFrameStyle(QFrame.Shape.NoFrame)
-        self.left_frame.setStyleSheet("""
-            QFrame {
-                background-color: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-            }
-        """)
+
         left_layout = QVBoxLayout(self.left_frame)
         left_layout.setContentsMargins(
             1, 1, 1, 1
@@ -282,20 +153,11 @@ class MainWindow(QMainWindow):
         left_layout.setSpacing(0)
         left_title = QLabel("原始文档")
         left_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        left_title.setFixedHeight(35)  # Restore fixed height
-        left_title.setStyleSheet("""
-            QLabel {
-                background-color: #ffffff;
-                color: #333333;
-                font-size: 14px;
-                font-weight: bold;
-                border-top-left-radius: 7px;
-                border-top-right-radius: 7px;
-                border-bottom: 1px solid #e0e0e0;
-            }
-        """)
+        left_title.setFixedHeight(42)  # Restore fixed height
+        left_title.setObjectName("sectionTitle")
+
         left_layout.addWidget(left_title)
-        self.left_pdf_widget = PdfJsWidget(name="left_view", profile=self.web_profile)
+        self.left_pdf_widget = PdfPreviewWidget(name="left_view", profile=self.web_profile)
         self.left_pdf_widget.setStyleSheet(
             "border: none; border-bottom-left-radius: 7px; border-bottom-right-radius: 7px;"
         )
@@ -303,33 +165,19 @@ class MainWindow(QMainWindow):
 
         # Middle panel (Translated PDF)
         self.middle_frame = QFrame()
+        self.middle_frame.setObjectName("documentPanel")
         self.middle_frame.setFrameStyle(QFrame.Shape.NoFrame)
-        self.middle_frame.setStyleSheet("""
-            QFrame {
-                background-color: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-            }
-        """)
+
         middle_layout = QVBoxLayout(self.middle_frame)
         middle_layout.setContentsMargins(1, 1, 1, 1)  # Add a small margin
         middle_layout.setSpacing(0)
         middle_title = QLabel("翻译文档")
         middle_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        middle_title.setFixedHeight(35)  # Restore fixed height
-        middle_title.setStyleSheet("""
-            QLabel {
-                background-color: #ffffff;
-                color: #333333;
-                font-size: 14px;
-                font-weight: bold;
-                border-top-left-radius: 7px;
-                border-top-right-radius: 7px;
-                border-bottom: 1px solid #e0e0e0;
-            }
-        """)
+        middle_title.setFixedHeight(42)  # Restore fixed height
+        middle_title.setObjectName("sectionTitle")
+
         middle_layout.addWidget(middle_title)
-        self.right_pdf_widget = PdfJsWidget(name="right_view", profile=self.web_profile)
+        self.right_pdf_widget = PdfPreviewWidget(name="right_view", profile=self.web_profile)
         self.right_pdf_widget.setStyleSheet(
             "border: none; border-bottom-left-radius: 7px; border-bottom-right-radius: 7px;"
         )
@@ -337,14 +185,9 @@ class MainWindow(QMainWindow):
 
         # Right panel (QA) - Restoring to a stable state with a visible title bar and content
         self.qa_panel = QFrame()
+        self.qa_panel.setObjectName("qaPanel")
         self.qa_panel.setFrameStyle(QFrame.Shape.NoFrame)
-        self.qa_panel.setStyleSheet("""
-            QFrame {
-                background-color: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-            }
-        """)
+
         qa_panel_layout = QVBoxLayout(self.qa_panel)
         qa_panel_layout.setContentsMargins(1, 1, 1, 1)
         qa_panel_layout.setSpacing(0)
@@ -352,18 +195,9 @@ class MainWindow(QMainWindow):
         # 1. Restore the external, styled title bar.
         qa_title = QLabel("智能问答")
         qa_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        qa_title.setFixedHeight(35)
-        qa_title.setStyleSheet("""
-            QLabel {
-                background-color: #ffffff;
-                color: #333333;
-                font-size: 14px;
-                font-weight: bold;
-                border-top-left-radius: 7px;
-                border-top-right-radius: 7px;
-                border-bottom: 1px solid #e0e0e0;
-            }
-        """)
+        qa_title.setFixedHeight(42)
+        qa_title.setObjectName("sectionTitle")
+
         qa_panel_layout.addWidget(qa_title)
 
         # 2. Restore the QA content widget below the title.
@@ -394,7 +228,7 @@ class MainWindow(QMainWindow):
         self.status_label.setSizePolicy(
             QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred
         )
-        self.status_label.setMaximumWidth(400)
+        self.status_label.setMaximumWidth(900)
         self.status_bar.addWidget(self.status_label)
 
         # 进度条（放在状态标签右侧）
@@ -458,7 +292,8 @@ class MainWindow(QMainWindow):
         self.right_pdf_widget.previewReady.connect(self.on_preview_ready)
 
         # Handle download requests from the web engine
-        self.web_profile.downloadRequested.connect(self.on_download_requested)
+        if self.web_profile is not None:
+            self.web_profile.downloadRequested.connect(self.on_download_requested)
 
     def on_download_requested(self, download):
         """Handle file download requests from the web view."""
@@ -505,10 +340,10 @@ class MainWindow(QMainWindow):
         path = download.downloadFileName()
         state = download.state()
 
-        if state == QWebEngineDownloadRequest.DownloadState.DownloadCompleted:
+        if state.name == "DownloadCompleted":
             QMessageBox.information(self, "下载完成", f"文件已成功保存到:\n{path}")
             print(f"下载完成: {path}")
-        elif state == QWebEngineDownloadRequest.DownloadState.DownloadCancelled:
+        elif state.name == "DownloadCancelled":
             print(f"下载已取消: {path}")
         else:
             QMessageBox.warning(self, "下载失败", f"无法下载文件。\n状态: {state}")
@@ -518,7 +353,7 @@ class MainWindow(QMainWindow):
         """切换滚动同步状态"""
         self._scroll_sync_enabled = not self._scroll_sync_enabled
         self.sync_btn.setText(
-            "关闭滚动同步" if self._scroll_sync_enabled else "开启滚动同步"
+            "同步滚动" if self._scroll_sync_enabled else "开启同步"
         )
         self.status_label.set_status(
             f"滚动同步已{'启用' if self._scroll_sync_enabled else '禁用'}", "info"
@@ -1105,6 +940,8 @@ class MainWindow(QMainWindow):
         is_new_file = self.current_file != file_path
 
         self.current_file = file_path
+        self.translated_file = None
+        self.export_btn.setEnabled(False)
         self.status_label.set_status(
             f"正在加载: {os.path.basename(file_path)}", "info"
         )
@@ -1136,6 +973,8 @@ class MainWindow(QMainWindow):
         existing = self._find_existing_translation(file_path)
         if existing:
             # 直接加载现有翻译版本
+            self.translated_file = existing
+            self.export_btn.setEnabled(True)
             self.right_pdf_widget.load_pdf(existing)
             self.status_label.set_status("已加载本地翻译版本", "success")
             self._diagnostics.info("import=%s using existing translation=%s", self._import_id, existing)
@@ -1146,6 +985,10 @@ class MainWindow(QMainWindow):
         self.right_pdf_widget.show_message("正在准备翻译...")
         self.start_translation(file_path)
         self._refresh_preview_warning()
+
+    def export_current_pdf(self):
+        if self.current_file and self.translated_file:
+            ExportDialog(self.current_file, self.translated_file, self).exec()
 
     def on_preview_failed(self, view_name, message):
         self._preview_failures[view_name] = message
@@ -1162,7 +1005,7 @@ class MainWindow(QMainWindow):
     def _refresh_preview_warning(self):
         if self._preview_failures:
             views = "、".join("原文" if name == "left_view" else "译文" for name in self._preview_failures)
-            self.status_label.set_status(f"{views}预览异常：请在引擎配置 → 诊断与日志中导出日志", "warning")
+            self.status_label.set_status(f"{views}预览异常：请在关于软件中导出日志", "warning")
 
     def _is_translation_enabled(self):
         """从配置文件判断是否启用翻译 (默认启用)"""
@@ -1278,6 +1121,8 @@ class MainWindow(QMainWindow):
                                translated_file, os.path.exists(translated_file))
         if os.path.exists(translated_file):
             self._preview_failures.pop("right_view", None)
+            self.translated_file = translated_file
+            self.export_btn.setEnabled(True)
             self.right_pdf_widget.load_pdf(translated_file)
             self.status_label.set_status("翻译完成", "success")
         else:
@@ -1601,7 +1446,8 @@ class UpdateCheckThread(QThread):
                 latest_version = release_data.get("tag_name", "").lstrip("v")
 
                 # 简单的版本比较
-                if latest_version and latest_version != current_version:
+                from packaging.version import Version
+                if latest_version and Version(latest_version) > Version(current_version):
                     self.update_checked.emit(True, latest_version)
                 else:
                     self.update_checked.emit(False, "已是最新版本")
@@ -1622,115 +1468,88 @@ class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("关于 FreePDF")
-        self.setFixedSize(500, 400)
+        self.resize(580, 410)
+        self.setMinimumSize(530, 390)
 
         # 创建检查更新线程
-        self.update_thread = UpdateCheckThread()
+        self.update_thread = UpdateCheckThread(self)
         self.update_thread.update_checked.connect(self.on_update_checked)
 
         self.setup_ui()
 
     def setup_ui(self):
-        """设置UI"""
         layout = QVBoxLayout(self)
-        layout.setSpacing(20)
-        layout.setContentsMargins(30, 30, 30, 30)
-
-        # 软件标题
-        title_label = QLabel("FreePDF")
-        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_label.setStyleSheet("""
-            QLabel {
-                font-size: 28px;
-                font-weight: bold;
-                color: #007acc;
-                margin-bottom: 10px;
-            }
-        """)
-        layout.addWidget(title_label)
-
-        # 版本信息
-        version_label = QLabel(f"版本 {__version__}")
-        version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        version_label.setStyleSheet("""
-            QLabel {
-                font-size: 16px;
-                color: #666;
-                margin-bottom: 20px;
-            }
-        """)
-        layout.addWidget(version_label)
-
-        # 开发者信息
-        info_text = QTextBrowser()
-        info_text.setReadOnly(True)
-        info_text.setMaximumHeight(180)
-        info_text.setHtml("""
-        <div style="font-size: 14px; line-height: 1.6; color: #333;">
-            <p><strong>制作者：</strong>zstar</p>
-            <p><strong>微信公众号：</strong>我有一计</p>
-            <p><strong>理念：</strong>一直致力于构建免费好用的软件</p>
-            <p><strong>项目地址：</strong>https://github.com/zstar1003/FreePDF</p>
-        </div>
-        """)
-        info_text.setStyleSheet("""
-            QTextBrowser {
-                border: 1px solid #ddd;
-                border-radius: 8px;
-                padding: 10px;
-                background-color: #f9f9f9;
-            }
-        """)
-        layout.addWidget(info_text)
-
-        # 按钮区域
-        button_layout = QHBoxLayout()
-
-        # 检查更新按钮
+        layout.setSpacing(18)
+        layout.setContentsMargins(28, 28, 28, 24)
+        title = QLabel("FreePDF")
+        title.setObjectName("brandTitle")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        version = QLabel(f"版本 {__version__}")
+        version.setObjectName("muted")
+        version.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(version)
+        description = QLabel("让阅读跨越语言。\n保留论文排版，逐页对照原文与译文。")
+        description.setWordWrap(True)
+        layout.addWidget(description)
+        info = QLabel('制作者：zstar  ·  微信公众号：我有一计<br><br>'
+                      '<a href="https://github.com/zstar1003/FreePDF" style="color:#126d66">访问 GitHub 项目</a>')
+        info.setOpenExternalLinks(True)
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        self.feedback_label = QLabel("")
+        self.feedback_label.setWordWrap(True)
+        self.feedback_label.setObjectName("muted")
+        layout.addWidget(self.feedback_label)
+        layout.addStretch()
+        buttons = QHBoxLayout()
+        self.export_logs_btn = QPushButton("导出日志")
+        style_button(self.export_logs_btn, "export")
+        self.export_logs_btn.clicked.connect(self.export_logs)
+        buttons.addWidget(self.export_logs_btn)
         self.update_btn = QPushButton("检查更新")
-        self.update_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #28a745;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 6px;
-                font-weight: bold;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #218838;
-            }
-            QPushButton:disabled {
-                background-color: #6c757d;
-                color: #fff;
-            }
-        """)
+        style_button(self.update_btn, "update")
         self.update_btn.clicked.connect(self.check_for_updates)
-        button_layout.addWidget(self.update_btn)
-
-        button_layout.addStretch()
-
-        # 关闭按钮
+        buttons.addWidget(self.update_btn)
+        buttons.addStretch()
         close_btn = QPushButton("关闭")
-        close_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #6c757d;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 6px;
-                font-weight: bold;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #5a6268;
-            }
-        """)
+        style_button(close_btn, quiet=True)
         close_btn.clicked.connect(self.accept)
-        button_layout.addWidget(close_btn)
+        buttons.addWidget(close_btn)
+        layout.addLayout(buttons)
 
-        layout.addLayout(button_layout)
+    def export_logs(self):
+        from datetime import datetime
+        from utils.diagnostics import export_diagnostics
+        path, _ = QFileDialog.getSaveFileName(self, "导出日志", "FreePDF-logs-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".zip", "ZIP 压缩文件 (*.zip)")
+        if not path:
+            return
+        if not path.lower().endswith(".zip"):
+            path += ".zip"
+        window = self.parentWidget()
+        states = {}
+        if window is not None and hasattr(window, "left_pdf_widget"):
+            states = {"left": window.left_pdf_widget.diagnostic_state(), "right": window.right_pdf_widget.diagnostic_state()}
+        try:
+            export_diagnostics(path, states)
+            self.feedback_label.setText("日志已导出：" + path)
+        except Exception as error:
+            get_logger("export").exception("Diagnostic export failed")
+            self.feedback_label.setText("日志导出失败：" + str(error))
+
+    def closeEvent(self, event):
+        if self.update_thread.isRunning():
+            event.ignore()
+        else:
+            event.accept()
+
+    def reject(self):
+        if not self.update_thread.isRunning():
+            super().reject()
+
+    def accept(self):
+        if not self.update_thread.isRunning():
+            super().accept()
 
     def check_for_updates(self):
         """检查更新"""

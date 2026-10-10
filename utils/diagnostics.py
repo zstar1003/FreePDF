@@ -60,12 +60,8 @@ def redact_data(value):
 
 
 def data_dir():
-    if sys.platform == "win32":
-        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local")
-        return base / "FreePDF"
-    if sys.platform == "darwin":
-        return Path.home() / "Library/Application Support/FreePDF"
-    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "FreePDF"
+    from utils.config_path import application_data_dir
+    return application_data_dir()
 
 
 def read_preferences():
@@ -156,6 +152,18 @@ def get_logger(name):
     return logging.getLogger("freepdf." + name)
 
 
+def native_library_inventory():
+    if not getattr(sys, "frozen", False) or sys.platform != "win32":
+        return []
+    root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    names = ("Qt6Core.dll", "Qt6Gui.dll", "Qt6Widgets.dll", "Qt6Pdf.dll", "Qt6PdfWidgets.dll")
+    output = []
+    for name in names:
+        path = root / "PyQt6/Qt6/bin" / name
+        output.append({"path": str(path), "exists": path.is_file(), "size": path.stat().st_size if path.is_file() else None})
+    return output
+
+
 def environment_info():
     versions = {}
     for package in ("PyQt6", "PyQt6-Qt6", "PyQt6-WebEngine", "PyQt6-WebEngine-Qt6", "PyMuPDF", "pdf2zh", "pyinstaller"):
@@ -166,7 +174,7 @@ def environment_info():
     return {
         "session": SESSION_ID,
         "collected_at": datetime.now(timezone.utc).isoformat(),
-        "app_version": "5.1.3",
+        "app_version": __import__("utils.version", fromlist=["VERSION"]).VERSION,
         "platform": platform.platform(),
         "machine": platform.machine(),
         "python": sys.version,
@@ -175,6 +183,8 @@ def environment_info():
         "working_directory": os.getcwd(),
         "bundle_directory": getattr(sys, "_MEIPASS", None),
         "versions": versions,
+        "preview_backend": "qt_pdf" if __import__("utils.preview_backend", fromlist=["use_native_preview"]).use_native_preview() else "webengine_with_native_recovery",
+        "native_libraries": native_library_inventory(),
         "qt_environment": {key: os.environ.get(key, "") for key in (
             "QTWEBENGINE_CHROMIUM_FLAGS", "QT_OPENGL", "QT_QUICK_BACKEND", "QT_QPA_PLATFORM",
         )},

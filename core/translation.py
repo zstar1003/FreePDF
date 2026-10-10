@@ -122,7 +122,8 @@ class TranslationThread(QThread):
             pymupdf.Document.subset_fonts = safe_subset_fonts
             self.logger.info("已启用安全字体子集化模式")
 
-            result = translate_func(files=[input_file], **params)
+            from utils.translation_engine import translate_preserving_source
+            result = translate_preserving_source(translate_func, input_file, params)
             return result
         finally:
             pymupdf.Document.subset_fonts = original_subset_fonts
@@ -470,6 +471,10 @@ class TranslationThread(QThread):
                 if result and len(result) > 0:
                     file_mono, file_dual = result[0]
                     self.logger.info(f"翻译输出文件: mono={file_mono}, dual={file_dual}")
+                    if self.save_dual_file and file_mono and file_dual:
+                        from utils.pdf_export import export_pdf
+                        export_pdf(self.input_file, file_mono, file_dual)
+                        self.logger.info("已保存逐页左右对照 PDF")
 
                     if self._stop_requested:
                         self.logger.warning("翻译被用户取消")

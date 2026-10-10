@@ -49,32 +49,32 @@ class QASettingsDialog(QDialog):
             }
             QLabel {
                 color: #333;
-                font-size: 12px;
+                font-size: 14px;
             }
             QLineEdit {
                 border: 1px solid #ddd;
                 border-radius: 3px;
                 padding: 6px;
-                font-size: 12px;
+                font-size: 14px;
                 background-color: #fafafa;
             }
             QLineEdit:focus {
-                border-color: #007acc;
+                border-color: #126d66;
                 background-color: #ffffff;
             }
             QTextEdit {
                 border: 1px solid #ddd;
                 border-radius: 3px;
                 padding: 6px;
-                font-size: 12px;
+                font-size: 14px;
                 background-color: #fafafa;
             }
             QTextEdit:focus {
-                border-color: #007acc;
+                border-color: #126d66;
                 background-color: #ffffff;
             }
             QPushButton {
-                background-color: #007acc;
+                background-color: #126d66;
                 color: white;
                 border: none;
                 padding: 8px 20px;
@@ -229,10 +229,10 @@ class QASettingsDialog(QDialog):
             }
             QMessageBox QLabel {
                 color: #333;
-                font-size: 12px;
+                font-size: 14px;
             }
             QMessageBox QPushButton {
-                background-color: #007acc;
+                background-color: #126d66;
                 color: white;
                 border: none;
                 padding: 6px 16px;
