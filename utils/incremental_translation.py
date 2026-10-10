@@ -93,7 +93,7 @@ def run_translation_job(job, emit, cancellation, engine=None):
             try:
                 saved = json.loads(manifest_path.read_text("utf-8"))
                 if all(saved.get(key) == value for key, value in fingerprint.items()):
-                    candidate = pymupdf.open(partial)
+                    candidate = pymupdf.open(stream=partial.read_bytes(), filetype="pdf")
                     saved_pages = set(saved.get("completed_pages", []))
                     if candidate.page_count == count and saved_pages <= set(selected):
                         document, completed = candidate, saved_pages

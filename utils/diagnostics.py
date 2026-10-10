@@ -270,7 +270,11 @@ def export_diagnostics(destination, viewer_states=None):
         with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
             archive.writestr("environment.json", json.dumps(redact_data(environment_info()), ensure_ascii=False, indent=2))
             archive.writestr("preview_state.json", json.dumps(redact_data(viewer_states or {}), ensure_ascii=False, indent=2))
-            archive.writestr("README.txt", "FreePDF diagnostics: environment, preview state and rotating logs only.\n"
+            progress_module = sys.modules.get("utils.translation_logger")
+            progress_logger = getattr(progress_module, "_logger", None)
+            progress = progress_logger.get_state() if progress_logger is not None else {}
+            archive.writestr("translation_state.json", json.dumps(redact_data(progress), ensure_ascii=False, indent=2))
+            archive.writestr("README.txt", "FreePDF diagnostics: environment, preview/translation state and rotating logs only.\n"
                               "No PDF files or API configuration included. Paths and filenames may appear in logs.\n")
             for path in sorted(directory.glob("freepdf.log*")):
                 if path.is_file():

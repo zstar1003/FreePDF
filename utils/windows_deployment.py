@@ -8,7 +8,7 @@ _dll_directories = []
 
 
 def configure_windows_dll_search():
-    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+    if sys.platform != "win32" or not getattr(sys, "frozen", False) or not getattr(sys, "_MEIPASS", None):
         return
     root = Path(sys._MEIPASS)
     qt = root / "PyQt6/Qt6"
