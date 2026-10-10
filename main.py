@@ -323,24 +323,6 @@ if __name__ == "__main__":
     get_logger("startup").info("application icon=%s null=%s", resource_path("ui/logo/logo.png"), app.windowIcon().isNull())
     app.aboutToQuit.connect(lambda: get_logger("startup").info("application exiting"))
 
-    # 全局字体设置
-    try:
-        from PyQt6.QtGui import QFont, QFontDatabase
-
-        font_path = get_resource_path(os.path.join("fonts", "ht.ttf"))
-        if os.path.exists(font_path):
-            font_id = QFontDatabase.addApplicationFont(font_path)
-            if font_id != -1:
-                family = QFontDatabase.applicationFontFamilies(font_id)[0]
-                app.setFont(QFont(family, 10))
-                print(f"已加载并设置全局字体: {family}")
-            else:
-                print(f"加载字体失败: {font_path}")
-        else:
-            print(f"字体文件不存在: {font_path}")
-    except Exception as e:
-        print(f"设置全局字体出错: {e}")
-
     # 设置应用程序属性
     app.setApplicationName("FreePDF")
     from utils.version import VERSION
@@ -368,13 +350,33 @@ if __name__ == "__main__":
         window.load_pdf_file(pdf_path)
         timer = QTimer(window)
         timer.setInterval(100)
+        smoke_started = False
         def verify_packaged_preview():
+            global smoke_started
             states = [widget.diagnostic_state() for widget in (window.left_pdf_widget, window.right_pdf_widget)]
             if all(state.get("first_page_rendered") for state in states):
                 if window.windowIcon().isNull() or app.windowIcon().isNull():
                     get_logger("startup").error("packaged_icon_missing")
                     app.exit(2)
                     return
+                if "--translation-smoke" in sys.argv:
+                    if not smoke_started:
+                        smoke_started = True
+                        window.start_translation(pdf_path, smoke_test=True)
+                        return
+                    from utils.translation_logger import get_translation_logger
+                    state = get_translation_logger().get_state()
+                    if state.get("status") != "completed" or window.translation_manager.is_translating():
+                        return
+                    if not window.translated_file or states[1].get("pdf_path") != window.translated_file:
+                        return
+                    import pymupdf
+                    with pymupdf.open(window.translated_file) as translated:
+                        if not all("验证结果" in page.get_text() for page in translated):
+                            get_logger("startup").error("packaged_translation_text_missing")
+                            app.exit(4)
+                            return
+                    get_logger("startup").info("packaged_translation_verified completed=%s total=%s", state.get("completed"), state.get("total"))
                 get_logger("startup").info("packaged_preview_verified states=%s", states)
                 screenshot = os.environ.get("FREEPDF_SMOKE_SCREENSHOT")
                 if screenshot:
@@ -387,7 +389,7 @@ if __name__ == "__main__":
                 QTimer.singleShot(100, lambda: app.exit(0))
         timer.timeout.connect(verify_packaged_preview)
         timer.start()
-        QTimer.singleShot(45000, lambda: app.exit(3))
+        QTimer.singleShot(120000 if "--translation-smoke" in sys.argv else 45000, lambda: app.exit(3))
 
     # 运行应用程序
     exit_code = app.exec()
@@ -398,6 +400,7 @@ if __name__ == "__main__":
     from PyQt6.QtCore import QEvent
     for widget in (window.left_pdf_widget, window.right_pdf_widget):
         widget.cleanup()
+    window.translation_manager.cleanup()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     sip.delete(window)
     sip.delete(app)

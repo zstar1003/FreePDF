@@ -195,8 +195,16 @@ class PdfJsWidget(QWidget):
         """设置界面语言（例如 'en-us', 'zh-cn', 'zh-tw' 等）。设置为 None 则使用浏览器默认。"""
         self._locale = locale.lower() if locale else None
 
-    def load_pdf(self, pdf_path):
+    def load_pdf(self, pdf_path, preserve_position=False, position=None):
         """Loads a PDF file into the view."""
+        self._position_request = uuid.uuid4().hex
+        request_id = self._position_request
+        if preserve_position:
+            def reload_with_position(value):
+                if not getattr(self, "_closed", False) and request_id == self._position_request:
+                    self.load_pdf(pdf_path, position=value)
+            self.view.page().runJavaScript("(() => {const v=globalThis.PDFViewerApplication?.pdfViewer;return v ? {page:v.currentPageNumber,zoom:v.currentScaleValue,top:document.getElementById('viewerContainer').scrollTop} : null;})()", reload_with_position)
+            return
         self._watchdog.stop()
         self._load_id = uuid.uuid4().hex[:10]
         self._started_at = time.monotonic()
@@ -228,6 +236,10 @@ class PdfJsWidget(QWidget):
             self._report_failure("无法读取 PDF 或缺少预览资源，请在关于软件中导出日志。", show_in_view=True)
             return
         viewer_url = build_viewer_url(viewer_path, QUrl.fromLocalFile(pdf_file_path), self._locale)
+        if isinstance(position, dict):
+            page_number = max(1, int(position.get("page", 1)))
+            fragment = viewer_url.fragment()
+            viewer_url.setFragment(fragment + "&page=" + str(page_number) + "&zoom=" + str(position.get("zoom", "page-width")))
         self._state["viewer_url"] = viewer_url.toString(QUrl.ComponentFormattingOption.FullyEncoded)
         self._log("load_requested", url=self._state["viewer_url"],
                   accelerated_canvas=self.view.settings().testAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled))
@@ -425,6 +437,7 @@ class PdfJsWidget(QWidget):
 
     def cleanup(self):
         """Clean up resources to prevent memory leaks and shutdown warnings."""
+        self._closed = True
         self._awaiting_pdf = False
         self._watchdog.stop()
         if self.view:

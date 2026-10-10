@@ -2,6 +2,9 @@
 
 import sys
 
+from utils.windows_deployment import configure_windows_dll_search
+configure_windows_dll_search()
+
 if getattr(sys, "frozen", False) and "--multiprocessing-fork" not in sys.argv:
     for stream in (sys.stdout, sys.stderr):
         if stream is not None and hasattr(stream, "reconfigure"):

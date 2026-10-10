@@ -11,6 +11,7 @@ QMainWindow, QDialog { background: #eef3f5; }
 QDialog { padding: 4px; }
 QLabel { background: transparent; }
 QLabel#brandTitle { font-size: 25px; font-weight: 700; letter-spacing: -1px; }
+QLabel#dialogTitle { font-size: 18px; font-weight: 600; }
 QLabel#muted, QLabel#emptyState { color: #637c86; }
 QLabel#emptyState { font-size: 18px; padding: 28px; }
 QLabel#sectionTitle { font-size: 16px; font-weight: 600; padding: 8px 14px; background: #ffffff; }
@@ -127,6 +128,12 @@ class ThemeFilter(QObject):
 
 
 def install_theme(app):
+    from PyQt6.QtGui import QFont, QFontDatabase
+    families = QFontDatabase.families()
+    family = next((name for name in ("PingFang SC", "Microsoft YaHei UI", "Noto Sans CJK SC") if name in families), app.font().family())
+    font = QFont(family)
+    font.setPixelSize(15)
+    app.setFont(font)
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE + 'QComboBox::down-arrow { image: url("' + str(resource_path("ui/icons/chevron-down.svg")) + '"); width: 14px; height: 14px; }')
     theme_filter = ThemeFilter(app)

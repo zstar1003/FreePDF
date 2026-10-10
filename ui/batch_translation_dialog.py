@@ -38,10 +38,13 @@ class BatchTranslationThread(QThread):
         self.lang_in = lang_in
         self.lang_out = lang_out
         self._stop_requested = False
+        self._current_manager = None
         
     def stop(self):
         """停止翻译"""
         self._stop_requested = True
+        if self._current_manager and self._current_manager.current_thread:
+            self._current_manager.current_thread.stop()
         
     def run(self):
         """执行批量翻译"""
@@ -61,6 +64,7 @@ class BatchTranslationThread(QThread):
                 
                 # 创建翻译管理器
                 translation_manager = TranslationManager()
+                self._current_manager = translation_manager
                 
                 # 设置完成回调
                 event_loop = QEventLoop()
@@ -83,6 +87,8 @@ class BatchTranslationThread(QThread):
                 
                 # 阻塞等待翻译线程结束
                 event_loop.exec()
+                translation_manager.cleanup()
+                self._current_manager = None
                 
                 if self._stop_requested:
                     break
@@ -521,7 +527,7 @@ class BatchTranslationDialog(QDialog):
         """停止翻译"""
         if self.translation_thread and self.translation_thread.isRunning():
             self.translation_thread.stop()
-            self.translation_thread.wait(3000)  # 等待3秒
+            self.translation_thread.wait(5000)  # 等待3秒
             
         self.reset_ui()
         # self.result_text.append("翻译已停止。") # Removed as per edit hint
@@ -582,7 +588,7 @@ class BatchTranslationDialog(QDialog):
             
             if reply == QMessageBox.StandardButton.Yes:
                 self.translation_thread.stop()
-                self.translation_thread.wait(3000)
+                self.translation_thread.wait(5000)
                 event.accept()
             else:
                 event.ignore()

@@ -3,11 +3,16 @@
 import os
 import glob
 import shutil
+import ast
 from PyInstaller.utils.hooks import copy_metadata
 from PyInstaller.building.utils import format_binaries_and_datas
 
 # 获取当前目录
 current_dir = os.path.dirname(os.path.abspath(SPEC))
+
+configuration = ast.parse(open(os.path.join(current_dir, 'utils', 'build_config.py'), encoding='utf-8').read())
+native_preview = next(ast.literal_eval(node.value) for node in configuration.body if isinstance(node, ast.Assign)) == 'native'
+webengine_imports = ['PyQt6.QtWebEngineCore', 'PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebChannel']
 
 # 查找onnxruntime DLL文件
 def find_onnx_binaries():
@@ -57,7 +62,6 @@ def find_vc_redist_dlls():
     
     search_dirs = [
         "C:\\Windows\\System32",
-        "C:\\Windows\\SysWOW64",
     ]
     
     for dll_name in vc_dlls:
@@ -166,11 +170,11 @@ a = Analysis(
         'multiprocessing.queues',
         'multiprocessing.context',
         'multiprocessing.spawn',
-    ],
+    ] + ([] if native_preview else webengine_imports),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[os.path.join(current_dir, 'diagnostics_hook.py'), os.path.join(current_dir, 'onnxruntime_hook.py')],
-    excludes=['PyQt6.QtWebEngineCore', 'PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebEngineQuick', 'PyQt6.QtWebChannel'],
+    excludes=webengine_imports + ['PyQt6.QtWebEngineQuick'] if native_preview else [],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -178,8 +182,14 @@ a = Analysis(
 )
 
 
+# The Chromium helper does not inherit Python's AddDllDirectory handles.
+# Ship the same app-local runtime next to the helper, including newer MSVC parts.
+if not native_preview:
+    for source, _ in vc_binaries:
+        a.binaries.append(('PyQt6/Qt6/bin/' + os.path.basename(source), source, 'BINARY'))
+
 # Retain installed component versions in exported support diagnostics.
-for package in ('PyQt6', 'PyQt6-Qt6', 'PyMuPDF', 'pdf2zh', 'pyinstaller'):
+for package in ('PyQt6', 'PyQt6-Qt6', 'PyMuPDF', 'pdf2zh', 'pyinstaller') + (() if native_preview else ('PyQt6-WebEngine', 'PyQt6-WebEngine-Qt6')):
     a.datas += [(destination, source, 'DATA') for destination, source in format_binaries_and_datas(copy_metadata(package))]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)

@@ -40,18 +40,17 @@ def _exercise_engine(directory):
     data=directory/'data';data.mkdir()
     settings={'translation':{'service':'google','lang_in':'en','lang_out':'zh','envs':{}},'save_dual_file':True}
     (data/'pdf2zh_config.json').write_text(json.dumps(settings),'utf-8')
-    from core.translation import TranslationThread
-    modules={'translate':translate,'OnnxModel':OnnxModel,'ConfigManager':ConfigManager}
-    config={'fonts':{'zh':font,'default':font},'models':{'doclayout_path':str(root/'models/doclayout_yolo_docstructbench_imgsz1024.onnx')}}
-    preloaded=types.ModuleType('main');preloaded.get_pdf2zh_modules=lambda:(modules,config)
-    with patch.dict(os.environ,{'FREEPDF_DATA_DIR':str(data)}), patch.dict(sys.modules,{'main':preloaded}), patch.object(ConfigManager,'get',side_effect=lambda key,default=None:font if key=='NOTO_FONT_PATH' else default), patch.object(ConfigManager,'set') as set_font, patch.object(GoogleTranslator,'do_translate',offline_translate):
-        worker=TranslationThread(str(path),threads=1)
-        completed=[];failed=[]
-        worker.translation_completed.connect(completed.append)
-        worker.translation_failed.connect(failed.append)
-        worker.run()
-        assert not failed,failed
-        assert completed
+    from utils.incremental_translation import run_translation_job
+    import threading
+    job=dict(input_file=str(path),preview_dir=str(directory/'previews'),lang_in='en',lang_out='zh',service='google',
+             envs={},threads=1,pages='',save_dual_file=True,font=font,
+             model_path=str(root/'models/doclayout_yolo_docstructbench_imgsz1024.onnx'))
+    with patch.object(ConfigManager,'get',side_effect=lambda key,default=None:font if key=='NOTO_FONT_PATH' else default), patch.object(ConfigManager,'set') as set_font, patch.object(GoogleTranslator,'do_translate',offline_translate):
+        events=[]
+        run_translation_job(job,events.append,threading.Event())
+        assert events[-1]['type']=='completed',events
+        assert any(event['type']=='checkpoint' for event in events)
+        assert any(event['type']=='request_finished' for event in events)
         set_font.assert_called_with('NOTO_FONT_PATH',Path(font).as_posix())
     with pymupdf.open(result[0][1]) as saved_dual:
         assert saved_dual.page_count==1 and saved_dual[0].rect.width>saved_dual[0].rect.height

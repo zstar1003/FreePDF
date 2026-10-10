@@ -25,22 +25,22 @@ jobs:
         run: |
           python -m pip install uv
           uv pip install --system -r requirements.txt pytest
+      - name: Read tracked package variant
+        shell: pwsh
+        run: |
+          $backend = python -c "from utils.build_config import PREVIEW_BACKEND; print(PREVIEW_BACKEND)"
+          if ($backend -notin @('pdfjs', 'native')) { throw 'Unknown build variant' }
+          "PREVIEW_BACKEND=$backend" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Run regression tests
         env:
           QT_QPA_PLATFORM: offscreen
         run: python -m pytest tests -q
       - name: Build application
         run: pyinstaller build.spec --clean --noconfirm
-      - name: Check native preview dependencies and icon
-        shell: pwsh
-        run: |
-          $required = @('PyQt6/Qt6/bin/Qt6Pdf.dll', 'PyQt6/Qt6/bin/Qt6PdfWidgets.dll', 'ui/logo/logo.png')
-          foreach ($relative in $required) {
-            if (!(Test-Path "dist/FreePDF/_internal/$relative")) { throw "Missing packaged resource: $relative" }
-          }
-          if (Get-ChildItem dist/FreePDF -Recurse -Filter '*WebEngine*') { throw 'Windows package unexpectedly depends on WebEngine' }
-      - name: Check packaged startup
-        run: python tools/smoke_frozen.py dist/FreePDF/FreePDF.exe
+      - name: Check packaged dependencies, resources and icon
+        run: python tools/check_windows_bundle.py dist/FreePDF $env:PREVIEW_BACKEND
+      - name: Check actual packaged rendering and translation process
+        run: python tools/smoke_frozen.py dist/FreePDF/FreePDF.exe $env:PREVIEW_BACKEND --translation
       - name: Build NSIS installer
         shell: pwsh
         run: |
@@ -51,7 +51,8 @@ jobs:
             choco install nsis --yes --no-progress
             if ($LASTEXITCODE -ne 0) { throw 'NSIS installation failed' }
           }
-          & $compiler installer.nsi
+          if ($env:PREVIEW_BACKEND -eq 'native') { & $compiler /DNATIVE_PREVIEW installer.nsi }
+          else { & $compiler installer.nsi }
           if ($LASTEXITCODE -ne 0) { throw 'NSIS compilation failed' }
       - name: Check installed application from a path containing spaces
         shell: pwsh
@@ -60,12 +61,12 @@ jobs:
           $target = Join-Path $env:RUNNER_TEMP 'Free PDF Installed/FreePDF'
           $process = Start-Process $installer -ArgumentList @('/S', "/D=$target") -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw 'Installer failed' }
-          python tools/smoke_frozen.py "$target/FreePDF.exe"
+          python tools/smoke_frozen.py "$target/FreePDF.exe" $env:PREVIEW_BACKEND --translation
           if ($LASTEXITCODE -ne 0) { throw 'Installed PDF rendering failed' }
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: FreePDF-Windows-Installer
+          name: FreePDF-Windows-${{ env.PREVIEW_BACKEND }}-Installer
           path: FreePDF_v*.exe
           if-no-files-found: error
           retention-days: 14

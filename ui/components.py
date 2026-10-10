@@ -303,8 +303,8 @@ class StatusLabel(QLabel):
         """
         colors = {
             "info": "#126d66",
-            "success": "#28a745",
-            "warning": "#ffc107",
+            "success": "#126d66",
+            "warning": "#906012",
             "error": "#dc3545",
         }
 
@@ -317,7 +317,7 @@ class StatusLabel(QLabel):
                 background-color: #f8f9fa;
                 border: 1px solid #dee2e6;
                 border-radius: 3px;
-                font-weight: bold;
+                font-weight: 500;
             }}
         """)
         self.setText(message)

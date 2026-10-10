@@ -72,9 +72,10 @@ class PdfPreviewWidget(QWidget):
         if self._path:
             self._viewer.load_pdf(self._path)
 
-    def load_pdf(self, path):
+    def load_pdf(self, path, preserve_position=False):
+        preserve_position = preserve_position and self._path is not None
         self._path = None if path == "about:blank" else path
-        self._viewer.load_pdf(path)
+        self._viewer.load_pdf(path, preserve_position=preserve_position)
 
     def show_message(self, message):
         self._path = None

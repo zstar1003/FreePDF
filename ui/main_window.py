@@ -62,6 +62,8 @@ class MainWindow(QMainWindow):
 
         self.current_file = None
         self.translated_file = None
+        self._partial_translation = False
+        self._progress_dialog = None
         self._preview_failures = {}
         self._import_id = None
         self._diagnostics = get_logger("workflow")
@@ -259,6 +261,19 @@ class MainWindow(QMainWindow):
         )
         self.progress_percent.setVisible(False)
         self.status_bar.addWidget(self.progress_percent)
+        for widget in (self.status_label, self.progress_bar, self.progress_percent):
+            widget.setCursor(Qt.CursorShape.PointingHandCursor)
+            widget.setToolTip("点击查看翻译进度详情")
+            widget.installEventFilter(self)
+        self.status_label.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def show_translation_details(self):
+        from ui.translation_progress_dialog import TranslationProgressDialog
+        if self._progress_dialog is None:
+            self._progress_dialog = TranslationProgressDialog(self)
+        self._progress_dialog.show()
+        self._progress_dialog.raise_()
+        self._progress_dialog.activateWindow()
 
     def setup_connections(self):
         """设置信号连接"""
@@ -939,7 +954,9 @@ class MainWindow(QMainWindow):
         # 检查是否是新的PDF文件
         is_new_file = self.current_file != file_path
 
+        self.translation_manager.stop_current_translation()
         self.current_file = file_path
+        self._partial_translation = False
         self.translated_file = None
         self.export_btn.setEnabled(False)
         self.status_label.set_status(
@@ -1072,7 +1089,7 @@ class MainWindow(QMainWindow):
         """隐藏加载动画"""
         self.right_pdf_widget.hide_loading()
 
-    def start_translation(self, file_path):
+    def start_translation(self, file_path, smoke_test=False):
         """开始翻译PDF"""
         self._diagnostics.info("import=%s translation requested path=%s", self._import_id, file_path)
         # 显示并初始化进度条
@@ -1091,6 +1108,8 @@ class MainWindow(QMainWindow):
                 progress_callback=self.on_translation_progress,
                 completed_callback=self.on_translation_completed,
                 failed_callback=self.on_translation_failed,
+                partial_callback=self.on_translation_partial,
+                smoke_test=smoke_test,
             )
         except Exception as e:
             self.on_translation_failed(f"启动翻译失败: {str(e)}")
@@ -1110,9 +1129,21 @@ class MainWindow(QMainWindow):
                 pass
         else:
             sanitized = message.replace("\n", " ")
-            self.right_pdf_widget.show_message(sanitized)
+            if not self.translated_file or not self._partial_translation:
+                self.right_pdf_widget.show_message(sanitized)
             self.status_label.set_status(sanitized, "info")
             self._refresh_preview_warning()
+
+    @pyqtSlot(dict)
+    def on_translation_partial(self, event):
+        self.translated_file = event["path"]
+        self._partial_translation = True
+        self.export_btn.setEnabled(True)
+        if os.path.exists(event["preview_path"]):
+            self.right_pdf_widget.load_pdf(event["preview_path"], preserve_position=True)
+        self.status_label.set_status(f"已保存 {event['completed']}/{event['total']} 页译文 · 点击查看详情", "info")
+        self._diagnostics.info("import=%s incremental preview completed=%s total=%s path=%s", self._import_id,
+                               event['completed'], event['total'], event['path'])
 
     @pyqtSlot(str)
     def on_translation_completed(self, translated_file):
@@ -1122,6 +1153,7 @@ class MainWindow(QMainWindow):
         if os.path.exists(translated_file):
             self._preview_failures.pop("right_view", None)
             self.translated_file = translated_file
+            self._partial_translation = False
             self.export_btn.setEnabled(True)
             self.right_pdf_widget.load_pdf(translated_file)
             self.status_label.set_status("翻译完成", "success")
@@ -1206,12 +1238,14 @@ class MainWindow(QMainWindow):
     def on_translation_failed(self, error_message):
         """翻译失败"""
         self._diagnostics.error("import=%s translation failed: %s", self._import_id, error_message)
-        self.hide_loading()
+        if not self._partial_translation:
+            self.hide_loading()
         if hasattr(self, "progress_bar"):
             self.progress_bar.setVisible(False)
         if hasattr(self, "progress_percent"):
             self.progress_percent.setVisible(False)
-        QMessageBox.critical(self, "翻译失败", f"翻译过程中出现错误:\n{error_message}")
+        self.status_label.set_status("翻译已暂停 · 已完成页面已保留，点击查看详情" if self._partial_translation else "翻译失败 · 点击查看详情", "warning")
+        self.show_translation_details()
 
     @pyqtSlot(str)
     def on_translation_timeout(self, message):
@@ -1266,6 +1300,13 @@ class MainWindow(QMainWindow):
 
     def eventFilter(self, obj, event):
         """A global event filter to capture Ctrl+Wheel for zooming."""
+        if obj in (getattr(self, "status_label", None), getattr(self, "progress_bar", None), getattr(self, "progress_percent", None)):
+            if event.type() == event.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+                self.show_translation_details()
+                return True
+            if event.type() == event.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+                self.show_translation_details()
+                return True
         if event.type() == event.Type.Wheel:
             # The object can be a QWindow, which is not a QWidget.
             # We must ensure it's a widget before using isAncestorOf.
@@ -1485,21 +1526,25 @@ class AboutDialog(QDialog):
         title.setObjectName("brandTitle")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
-        version = QLabel(f"版本 {__version__}")
+        from utils.build_config import PREVIEW_BACKEND
+        version = QLabel(f"版本 {__version__}  ·  {'Windows 原生预览版' if PREVIEW_BACKEND == 'native' else 'PDF.js 标准版'}")
         version.setObjectName("muted")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(version)
         description = QLabel("让阅读跨越语言。\n保留论文排版，逐页对照原文与译文。")
         description.setWordWrap(True)
+        description.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(description)
         info = QLabel('制作者：zstar  ·  微信公众号：我有一计<br><br>'
                       '<a href="https://github.com/zstar1003/FreePDF" style="color:#126d66">访问 GitHub 项目</a>')
         info.setOpenExternalLinks(True)
         info.setWordWrap(True)
+        info.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(info)
         self.feedback_label = QLabel("")
         self.feedback_label.setWordWrap(True)
         self.feedback_label.setObjectName("muted")
+        self.feedback_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.feedback_label)
         layout.addStretch()
         buttons = QHBoxLayout()

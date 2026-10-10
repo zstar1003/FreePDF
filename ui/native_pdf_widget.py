@@ -93,10 +93,12 @@ class NativePdfWidget(QWidget):
                           self._state.get("load_id"), time.monotonic() - self._started_at if self._started_at else 0,
                           event, json.dumps(details, ensure_ascii=False))
 
-    def load_pdf(self, path):
+    def load_pdf(self, path, preserve_position=False):
         if path == "about:blank":
             self.show_message("打开 PDF，开始阅读与翻译")
             return
+        current_page = self.view.pageNavigator().currentPage() if preserve_position else 0
+        scroll_top = self.view.verticalScrollBar().value() if preserve_position else 0
         self._closed = False
         self._path = os.path.abspath(path)
         self.document.close()
@@ -105,6 +107,9 @@ class NativePdfWidget(QWidget):
                        "pdf_path": self._path, "stage": "requested", "first_page_rendered": False}
         self._log("native_load_requested", path=self._path)
         error = self.document.load(self._path)
+        if preserve_position and error == QPdfDocument.Error.None_:
+            self._jump(min(current_page, max(0, self.document.pageCount() - 1)))
+            QTimer.singleShot(0, lambda: self.view.verticalScrollBar().setValue(scroll_top) if not self._closed else None)
         if error != QPdfDocument.Error.None_ and not self._state.get("failure"):
             self._fail(error.name)
 

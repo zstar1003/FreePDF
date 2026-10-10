@@ -77,7 +77,7 @@ def test_windows_packaging_preserves_pdfjs_layout():
     assert "pdfjs/build/pdf.worker.mjs" in destinations
 
 
-def test_windows_package_preserves_icon_and_excludes_webengine():
+def test_windows_package_preserves_icon_and_conditionally_excludes_webengine():
     from PyInstaller.building.utils import format_binaries_and_datas
     spec=ast.parse((ROOT / "build.spec").read_text("utf-8"))
     analysis=next(n for n in ast.walk(spec) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=="Analysis")
@@ -85,5 +85,6 @@ def test_windows_package_preserves_icon_and_excludes_webengine():
     data=ast.literal_eval(args["datas"])
     expanded=format_binaries_and_datas([entry for entry in data if entry[0]=="ui"],str(ROOT))
     assert "ui/logo/logo.png" in {name.replace("\\", "/") for name,_ in expanded}
-    excludes=ast.literal_eval(args["excludes"])
-    assert "PyQt6.QtWebEngineCore" in excludes and "PyQt6.QtWebEngineWidgets" in excludes
+    assert isinstance(args["excludes"], ast.IfExp)
+    assert "native_preview" in ast.unparse(args["excludes"].test)
+    assert ast.literal_eval(args["excludes"].orelse)==[]

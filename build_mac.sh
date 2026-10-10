@@ -5,13 +5,13 @@
 set -e
 
 echo "======================================"
-echo "   FreePDF macOS 构建打包脚本 v6.0.0"
+echo "   FreePDF macOS 构建打包脚本 v6.0.1"
 echo "======================================"
 echo ""
 
 # 配置变量
 APP_NAME="FreePDF"
-VERSION="6.0.0"
+VERSION="6.0.1"
 SPEC_FILE="build_mac.spec"
 
 # 代码签名配置 (可选)

@@ -1,8 +1,8 @@
-"""Select the Windows reader before any WebEngine import can launch a helper."""
+"""Select the packaged reader before any WebEngine import launches a helper."""
 
 import os
-import sys
+from utils.build_config import PREVIEW_BACKEND
 
 
 def use_native_preview():
-    return sys.platform == "win32" or os.environ.get("FREEPDF_PREVIEW_BACKEND") == "native"
+    return os.environ.get("FREEPDF_PREVIEW_BACKEND", PREVIEW_BACKEND) == "native"
