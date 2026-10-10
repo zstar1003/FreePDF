@@ -149,7 +149,7 @@ def test_translation_state_export_redacts_credentials(tmp_path):
     from utils.translation_logger import get_translation_logger
     from utils import diagnostics
     secret='progress-state-secret-123456789'
-    diagnostics.register_secrets([secret])
+    diagnostics.register_secrets({"api_key":secret})
     logger=get_translation_logger()
     logger.update_state(completed=2,total=5,stage='等待翻译服务返回段落',api_key=secret,message='server returned '+secret)
     destination=tmp_path/'progress.zip'

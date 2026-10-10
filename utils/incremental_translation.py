@@ -76,7 +76,7 @@ def run_translation_job(job, emit, cancellation, engine=None):
     completed = set()
     document = None
     restore_engine = None
-    register_secrets(job.get("envs", {}).values())
+    register_secrets(job.get("envs", {}))
     log = get_logger("translation.worker")
     try:
         emit({"type": "stage", "stage": "检查文档与断点"})
