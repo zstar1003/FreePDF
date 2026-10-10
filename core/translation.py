@@ -422,6 +422,11 @@ class TranslationThread(QThread):
                     font_path = os.path.abspath(font_path).replace("\\", "/")
                     self.logger.info(f"字体路径: {font_path}")
 
+                # NOTO_FONT_PATH selects the output font. vfont is a formula
+                # font-name regex and must retain the upstream default.
+                if font_path:
+                    modules["ConfigManager"].set("NOTO_FONT_PATH", font_path)
+
                 # 映射服务名称：将"自定义"映射为pdf2zh支持的"openai"
                 service_name = self.service
                 if service_name == "自定义":
@@ -433,7 +438,6 @@ class TranslationThread(QThread):
                     "lang_out": self.lang_out,
                     "service": service_name,
                     "thread": self.threads,
-                    "vfont": font_path,
                     "output": input_dir,  # 设置输出目录为输入文件所在目录
                     "envs": self.envs,  # 添加环境变量
                 }

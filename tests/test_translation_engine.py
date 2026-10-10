@@ -29,11 +29,35 @@ def _exercise_engine(directory):
         page.insert_textbox(pymupdf.Rect(72,100,480,300),'This scientific paper presents a new research method. The translation keeps the original document layout and mathematics.',fontsize=16)
         doc.save(path)
     before=path.read_bytes()
+    path.chmod(0o444)
     with patch.object(ConfigManager,'get',side_effect=lambda key,default=None:font if key=='NOTO_FONT_PATH' else default), patch.object(GoogleTranslator,'do_translate',offline_translate):
         result=translate_preserving_source(translate,str(path),dict(output=str(directory),lang_in='en',lang_out='zh',service='google',thread=1,
                          model=OnnxModel(str(root/'models/doclayout_yolo_docstructbench_imgsz1024.onnx')),
-                         vfont=font,ignore_cache=True))
+                         ignore_cache=True))
+    # Exercise the application's real parameter preparation and automatic dual
+    # export too, with the same preloaded engine/model as normal startup.
+    import json, os, types
+    data=directory/'data';data.mkdir()
+    settings={'translation':{'service':'google','lang_in':'en','lang_out':'zh','envs':{}},'save_dual_file':True}
+    (data/'pdf2zh_config.json').write_text(json.dumps(settings),'utf-8')
+    from core.translation import TranslationThread
+    modules={'translate':translate,'OnnxModel':OnnxModel,'ConfigManager':ConfigManager}
+    config={'fonts':{'zh':font,'default':font},'models':{'doclayout_path':str(root/'models/doclayout_yolo_docstructbench_imgsz1024.onnx')}}
+    preloaded=types.ModuleType('main');preloaded.get_pdf2zh_modules=lambda:(modules,config)
+    with patch.dict(os.environ,{'FREEPDF_DATA_DIR':str(data)}), patch.dict(sys.modules,{'main':preloaded}), patch.object(ConfigManager,'get',side_effect=lambda key,default=None:font if key=='NOTO_FONT_PATH' else default), patch.object(ConfigManager,'set') as set_font, patch.object(GoogleTranslator,'do_translate',offline_translate):
+        worker=TranslationThread(str(path),threads=1)
+        completed=[];failed=[]
+        worker.translation_completed.connect(completed.append)
+        worker.translation_failed.connect(failed.append)
+        worker.run()
+        assert not failed,failed
+        assert completed
+        set_font.assert_called_with('NOTO_FONT_PATH',Path(font).as_posix())
+    with pymupdf.open(result[0][1]) as saved_dual:
+        assert saved_dual.page_count==1 and saved_dual[0].rect.width>saved_dual[0].rect.height
+        assert 'scientific' in saved_dual[0].get_text() and '验证结果' in saved_dual[0].get_text()
     assert path.read_bytes()==before
+    path.chmod(0o666)
     assert importlib.metadata.version('pdf2zh')=='1.9.11'
     assert calls
     mono,dual=result[0]
