@@ -135,7 +135,7 @@ Function .onInit
     
     uninst:
         ClearErrors
-        ExecWait '$R0 /S _?=$INSTDIR'
+        ExecWait '"$R0" /S _?=$INSTDIR'
         
         IfErrors no_remove_uninstaller done
         IfFileExists "$INSTDIR\FreePDF.exe" no_remove_uninstaller done

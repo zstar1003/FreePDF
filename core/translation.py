@@ -90,9 +90,16 @@ class TranslationThread(QThread):
             if self._active_requests == 0:
                 self._last_activity = time.monotonic()
             self._active_requests = event['active']
-            self._stage = '等待翻译服务返回段落'
+            if self._stage != '等待翻译服务返回段落':
+                self._stage = '等待翻译服务返回段落'
+                self.logger.start_stage(self._stage)
         elif kind in ('request_finished', 'request_failed'):
             self._active_requests = event['active']
+        if kind in ('request_started', 'request_finished', 'request_failed'):
+            self.logger.debug(f"段落处理事件: {kind}, 进行中={event['active']}, 已处理={event['finished']}, 失败次数={event['failed']}")
+        if kind == 'request_finished' and event['active'] == 0:
+            self._stage = '整理页面排版'
+            self.logger.start_stage(self._stage)
         if kind in ('stage', 'page_started'):
             self._stage = event['stage']
             self.logger.start_stage(self._stage)

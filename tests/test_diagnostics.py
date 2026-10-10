@@ -35,7 +35,7 @@ def test_export_redacts_logs_and_contains_only_support_files(log_directory):
     archive_path = log_directory / "support.zip"
     diagnostics.export_diagnostics(archive_path, {"view": "left", "api_key": secret})
     with zipfile.ZipFile(archive_path) as archive:
-        assert set(archive.namelist()) == {"environment.json", "preview_state.json", "README.txt", "logs/freepdf.log"}
+        assert set(archive.namelist()) == {"environment.json", "preview_state.json", "translation_state.json", "README.txt", "logs/freepdf.log"}
         output = "\n".join(archive.read(name).decode() for name in archive.namelist())
         assert secret not in output
         assert "another-private-key" not in output
@@ -143,3 +143,19 @@ def test_translation_clear_keeps_persistent_history(log_directory):
     assert "previous translation event" not in logger.get_logs_text()
     diagnostics._handler.flush()
     assert "previous translation event" in Path(diagnostics._handler.baseFilename).read_text()
+
+
+def test_translation_state_export_redacts_credentials(tmp_path):
+    from utils.translation_logger import get_translation_logger
+    from utils import diagnostics
+    secret='progress-state-secret-123456789'
+    diagnostics.register_secrets([secret])
+    logger=get_translation_logger()
+    logger.update_state(completed=2,total=5,stage='等待翻译服务返回段落',api_key=secret,message='server returned '+secret)
+    destination=tmp_path/'progress.zip'
+    diagnostics.export_diagnostics(destination)
+    with zipfile.ZipFile(destination) as archive:
+        state=json.loads(archive.read('translation_state.json'))
+        assert state['completed']==2 and state['total']==5
+        assert state['api_key']=='[REDACTED]'
+        assert secret not in archive.read('translation_state.json').decode()
