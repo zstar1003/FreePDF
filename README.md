@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <img src="https://img.shields.io/badge/版本-6.0.1-blue" alt="版本">
+  <img src="https://img.shields.io/badge/版本-6.0.2-blue" alt="版本">
   <a href="LICENSE"><img src="https://img.shields.io/badge/许可证-AGPL3.0-green" alt="许可证"></a>
   <h4>
     <a href="README.md">🇨🇳 中文</a>
@@ -26,13 +26,13 @@
 
 - windows：
 
-  - github：[https://github.com/zstar1003/FreePDF/releases/download/v6.0.1/FreePDF_v6.0.1.exe](https://github.com/zstar1003/FreePDF/releases/download/v6.0.1/FreePDF_v6.0.1.exe)
+  - github：[https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2.exe](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2.exe)
 
   - 夸克网盘：[https://pan.quark.cn/s/ee59aa67b65d](https://pan.quark.cn/s/ee59aa67b65d)
 
 - mac(arm64)：
 
-  - github：[https://github.com/zstar1003/FreePDF/releases/download/v6.0.1/FreePDF_v6.0.1_macOS.dmg](https://github.com/zstar1003/FreePDF/releases/download/v6.0.1/FreePDF_v6.0.1_macOS.dmg)
+  - github：[https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_macOS.dmg](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_macOS.dmg)
 
   - 夸克网盘：[https://pan.quark.cn/s/e96b0c3efc3a](https://pan.quark.cn/s/e96b0c3efc3a)
 
@@ -42,15 +42,15 @@
 
 | 安装包 | 预览方式 | 适用情况 |
 | --- | --- | --- |
-| [Windows 标准版](https://github.com/zstar1003/FreePDF/releases/download/v6.0.1/FreePDF_v6.0.1.exe) | PDF.js，默认版本 | 通常选择此版本，保留 PDF.js 的阅读工具 |
-| [Windows 原生预览特别版](https://github.com/zstar1003/FreePDF/releases/download/v6.0.1/FreePDF_v6.0.1_Windows_Native.exe) | 内置 Qt PDF，不包含 WebEngine | 遇到 Qt6WebEngineCore.dll 缺失、浏览器渲染失败或空白预览时，可直接安装此版本 |
-| [macOS ARM64 标准版](https://github.com/zstar1003/FreePDF/releases/download/v6.0.1/FreePDF_v6.0.1_macOS.dmg) | PDF.js | Apple Silicon Mac；使用 Developer ID 签名 |
+| [Windows 标准版](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2.exe) | PDF.js，默认版本 | 通常选择此版本，保留 PDF.js 的阅读工具 |
+| [Windows 原生预览特别版](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_Windows_Native.exe) | 内置 Qt PDF，不包含 WebEngine | 遇到 Qt6WebEngineCore.dll 缺失、浏览器渲染失败或空白预览时，可直接安装此版本 |
+| [macOS ARM64 标准版](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_macOS.dmg) | PDF.js | Apple Silicon Mac；使用 Developer ID 签名并通过 Apple 公证 |
 
-两个 Windows 安装包均提供翻译、问答、导出和日志功能。原生版会安装为 **FreePDF Native**，可与标准版共存；它的阅读工具以翻页、缩放和适宽为主。标准版预览异常时也会尝试自动切换至原生阅读器。原生版源码位于 [`codex/windows-native-v6.0.1`](https://github.com/zstar1003/FreePDF/tree/codex/windows-native-v6.0.1) 分支；主分支默认 PDF.js。“关于软件”显示当前安装包类型。GitHub Release 提供这三个安装包及 SHA256 校验文件；网盘/Homebrew 更新可能稍晚。
+两个 Windows 安装包均提供翻译、问答、导出和日志功能。原生版会安装为 **FreePDF Native**，可与标准版共存；它的阅读工具以翻页、缩放和适宽为主。标准版预览异常时也会尝试自动切换至原生阅读器。原生版源码位于 [`codex/windows-native-v6.0.2`](https://github.com/zstar1003/FreePDF/tree/codex/windows-native-v6.0.2) 分支；主分支默认 PDF.js。“关于软件”显示当前安装包类型。GitHub Release 提供这三个安装包及 SHA256 校验文件；网盘/Homebrew 更新可能稍晚。
 
 ### 实时进度与部分译文
 
-点击左下角状态文字、翻译进度条或百分比，可打开小型进度详情窗口，查看当前步骤、当前页、已保存页数、段落处理情况和等待时间。进度只按实际保存的页面增长。
+点击左下角状态文字、翻译进度条或百分比，可打开小型进度详情窗口，查看当前步骤、当前页、已保存页数、段落处理情况和等待时间。进度只按实际保存的页面增长。 详情窗口采用更紧凑的宽度，长文件名和错误信息会自动换行。翻译失败时，点击详情中的“引擎配置”，切换引擎并使用“测试连接”确认可用后重试。
 
 翻译每完成一页，就保存并更新右侧预览。翻译服务长时间没有返回结果、出错或点击“停止并保留”后，已经完成的页面仍可阅读和导出。`文件名-partial-mono.pdf` 保持原文页数和顺序，未完成的页面暂时保留原文；旁边的 `文件名-partial.freepdf.json` 保存断点信息。点击进度窗口的“继续翻译”，或重新导入同一 PDF，即可在原文件和翻译配置未改变时继续。不要删除断点文件，直到翻译完成。
 

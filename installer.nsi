@@ -8,11 +8,11 @@
 !ifdef NATIVE_PREVIEW
 !define APP_NAME "FreePDF Native"
 !define APP_KEY "FreePDFNative"
-!define OUTPUT_FILE "FreePDF_v6.0.1_Windows_Native.exe"
+!define OUTPUT_FILE "FreePDF_v6.0.2_Windows_Native.exe"
 !else
 !define APP_NAME "FreePDF"
 !define APP_KEY "FreePDF"
-!define OUTPUT_FILE "FreePDF_v6.0.1.exe"
+!define OUTPUT_FILE "FreePDF_v6.0.2.exe"
 !endif
 
 # Program Information
@@ -23,13 +23,13 @@ InstallDirRegKey HKLM "Software\${APP_KEY}" "InstallPath"
 RequestExecutionLevel admin
 
 # Version Information
-VIProductVersion "6.0.1.0"
+VIProductVersion "6.0.2.0"
 VIAddVersionKey "ProductName" "FreePDF"
 VIAddVersionKey "Comments" "Free PDF Translation Tool"
 VIAddVersionKey "CompanyName" "FreePDF Team"
 VIAddVersionKey "FileDescription" "FreePDF Setup"
-VIAddVersionKey "FileVersion" "6.0.1.0"
-VIAddVersionKey "ProductVersion" "6.0.1.0"
+VIAddVersionKey "FileVersion" "6.0.2.0"
+VIAddVersionKey "ProductVersion" "6.0.2.0"
 VIAddVersionKey "InternalName" "FreePDF"
 VIAddVersionKey "LegalCopyright" "© 2025 FreePDF Team"
 VIAddVersionKey "OriginalFilename" "FreePDF_Setup.exe"
@@ -77,7 +77,7 @@ Section "FreePDF" SecMain
     
     # Registry entries
     WriteRegStr HKLM "Software\${APP_KEY}" "InstallPath" "$INSTDIR"
-    WriteRegStr HKLM "Software\${APP_KEY}" "Version" "6.0.1"
+    WriteRegStr HKLM "Software\${APP_KEY}" "Version" "6.0.2"
     
     # Add to control panel programs list
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_KEY}" "DisplayName" "${APP_NAME}"
@@ -85,7 +85,7 @@ Section "FreePDF" SecMain
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_KEY}" "InstallLocation" "$INSTDIR"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_KEY}" "DisplayIcon" "$INSTDIR\FreePDF.exe"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_KEY}" "Publisher" "FreePDF Team"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_KEY}" "DisplayVersion" "6.0.1"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_KEY}" "DisplayVersion" "6.0.2"
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_KEY}" "NoModify" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_KEY}" "NoRepair" 1
     
@@ -123,14 +123,14 @@ Function .onInit
     StrCmp $R0 "" done
     
     # Check version for better update messaging
-    StrCmp $R1 "6.0.1" same_version different_version
+    StrCmp $R1 "6.0.2" same_version different_version
     
     same_version:
-        MessageBox MB_OKCANCEL|MB_ICONQUESTION "FreePDF v6.0.1 is already installed.$\n$\nClick OK to reinstall or Cancel to exit." IDOK uninst
+        MessageBox MB_OKCANCEL|MB_ICONQUESTION "FreePDF v6.0.2 is already installed.$\n$\nClick OK to reinstall or Cancel to exit." IDOK uninst
         Abort
         
     different_version:
-        MessageBox MB_OKCANCEL|MB_ICONINFORMATION "FreePDF $R1 is installed.$\n$\nClick OK to upgrade to v6.0.1 or Cancel to exit." IDOK uninst
+        MessageBox MB_OKCANCEL|MB_ICONINFORMATION "FreePDF $R1 is installed.$\n$\nClick OK to upgrade to v6.0.2 or Cancel to exit." IDOK uninst
         Abort
     
     uninst:

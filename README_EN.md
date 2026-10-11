@@ -6,7 +6,7 @@
 
 <div align="center">
 
-<img src="https://img.shields.io/badge/版-6.0.1-blue" alt="版">
+<img src="https://img.shields.io/badge/版-6.0.2-blue" alt="版">
 
 <a href="LICENSE"><img src="https://img.shields.io/badge/许可证-AGPL3.0-green" alt="许可证"></a>
 
@@ -34,13 +34,13 @@ A free PDF document reader that supports converting PDF documents in various lan
 
 - Windows:
 
-- GitHub: [https://github.com/zstar1003/FreePDF/releases/download/v6.0.1/FreePDF_v6.0.1.exe](https://github.com/zstar1003/FreePDF/releases/download/v6.0.1/FreePDF_v6.0.1.exe)
+- GitHub: [https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2.exe](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2.exe)
 
 - Quark Drive: [https://pan.quark.cn/s/ee59aa67b65d](https://pan.quark.cn/s/ee59aa67b65d)
 
 - Mac (arm64):
 
-- GitHub: [https://github.com/zstar1003/FreePDF/releases/download/v6.0.1/FreePDF_v6.0.1_macOS.dmg](https://github.com/zstar1003/FreePDF/releases/download/v6.0.1/FreePDF_v6.0.1_macOS.dmg)
+- GitHub: [https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_macOS.dmg](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_macOS.dmg)
 
 - Quark Drive: [https://pan.quark.cn/s/e96b0c3efc3a](https://pan.quark.cn/s/e96b0c3efc3a)
 
@@ -50,15 +50,15 @@ A free PDF document reader that supports converting PDF documents in various lan
 
 | Package | Reader | When to choose it |
 | --- | --- | --- |
-| [Windows standard](https://github.com/zstar1003/FreePDF/releases/download/v6.0.1/FreePDF_v6.0.1.exe) | PDF.js (default) | Recommended for regular use and the PDF.js reading tools |
-| [Windows native preview edition](https://github.com/zstar1003/FreePDF/releases/download/v6.0.1/FreePDF_v6.0.1_Windows_Native.exe) | Qt PDF, without WebEngine | Choose it if WebEngine DLL errors or blank previews occur |
-| [macOS ARM64 standard](https://github.com/zstar1003/FreePDF/releases/download/v6.0.1/FreePDF_v6.0.1_macOS.dmg) | PDF.js | Apple Silicon; Developer ID signed |
+| [Windows standard](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2.exe) | PDF.js (default) | Recommended for regular use and the PDF.js reading tools |
+| [Windows native preview edition](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_Windows_Native.exe) | Qt PDF, without WebEngine | Choose it if WebEngine DLL errors or blank previews occur |
+| [macOS ARM64 standard](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_macOS.dmg) | PDF.js | Apple Silicon; Developer ID signed and Apple notarized |
 
-Both Windows packages include translation, Q&A, export and diagnostic logs. The native edition installs as **FreePDF Native** alongside the standard edition and provides page navigation, zoom and fit-to-width controls. The standard edition also attempts native recovery when PDF.js fails. The native source is in the [`codex/windows-native-v6.0.1`](https://github.com/zstar1003/FreePDF/tree/codex/windows-native-v6.0.1) branch; main defaults to PDF.js. About identifies the installed edition. GitHub Release includes all three packages and SHA256 checksums; mirrors and Homebrew may update later.
+Both Windows packages include translation, Q&A, export and diagnostic logs. The native edition installs as **FreePDF Native** alongside the standard edition and provides page navigation, zoom and fit-to-width controls. The standard edition also attempts native recovery when PDF.js fails. The native source is in the [`codex/windows-native-v6.0.2`](https://github.com/zstar1003/FreePDF/tree/codex/windows-native-v6.0.2) branch; main defaults to PDF.js. About identifies the installed edition. GitHub Release includes all three packages and SHA256 checksums; mirrors and Homebrew may update later.
 
 ### Live progress and partial translations
 
-Click the bottom-left status, progress bar or percentage to open live details: actual stage, current page, saved pages, paragraph processing and waiting time. Progress advances only after pages are saved.
+Click the bottom-left status, progress bar or percentage to open live details: actual stage, current page, saved pages, paragraph processing and waiting time. Progress advances only after pages are saved. The compact details window wraps long filenames and errors. After a translation failure, use Engine configuration to switch the translation engine and Test connection before retrying.
 
 Each completed page is saved and displayed immediately. A timeout, error or “Stop and keep” preserves completed work for reading and export. `name-partial-mono.pdf` preserves the original page count and order; pending pages retain their original contents. `name-partial.freepdf.json` stores the checkpoint. Use “Continue translation” in the progress window or reimport the same PDF to resume when the source and translation settings match. Keep both checkpoint files until completion.
 

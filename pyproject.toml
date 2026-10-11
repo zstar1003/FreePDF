@@ -1,6 +1,6 @@
 [project]
 name = "freepdf"
-version = "5.1.3"
+version = "6.0.2"
 description = "A free PDF reader"
 readme = "README.md"
 requires-python = ">=3.10"
