@@ -32,19 +32,7 @@ A free PDF document reader that supports converting PDF documents in various lan
 
 ## 📦 How to Use
 
-- Windows:
-
-- GitHub: [https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2.exe](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2.exe)
-
-- Quark Drive: [https://pan.quark.cn/s/ee59aa67b65d](https://pan.quark.cn/s/ee59aa67b65d)
-
-- Mac (arm64):
-
-- GitHub: [https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_macOS.dmg](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_macOS.dmg)
-
-- Quark Drive: [https://pan.quark.cn/s/e96b0c3efc3a](https://pan.quark.cn/s/e96b0c3efc3a)
-
-- HomeBrew: Run `brew install` freepdf
+Download all installers from [GitHub Release](https://github.com/zstar1003/FreePDF/releases/latest). Choose a package below for your operating system and preferred PDF reader.
 
 ### Choose an installer
 
@@ -54,7 +42,7 @@ A free PDF document reader that supports converting PDF documents in various lan
 | [Windows native preview edition](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_Windows_Native.exe) | Qt PDF, without WebEngine | Choose it if WebEngine DLL errors or blank previews occur |
 | [macOS ARM64 standard](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_macOS.dmg) | PDF.js | Apple Silicon; Developer ID signed and Apple notarized |
 
-Both Windows packages include translation, Q&A, export and diagnostic logs. The native edition installs as **FreePDF Native** alongside the standard edition and provides page navigation, zoom and fit-to-width controls. The standard edition also attempts native recovery when PDF.js fails. The native source is in the [`codex/windows-native-v6.0.2`](https://github.com/zstar1003/FreePDF/tree/codex/windows-native-v6.0.2) branch; main defaults to PDF.js. About identifies the installed edition. GitHub Release includes all three packages and SHA256 checksums; mirrors and Homebrew may update later.
+Both Windows packages include translation, Q&A, export and diagnostic logs. The native edition installs as **FreePDF Native** alongside the standard edition and provides page navigation, zoom and fit-to-width controls. The standard edition also attempts native recovery when PDF.js fails. The native source is in the [`codex/windows-native-v6.0.2`](https://github.com/zstar1003/FreePDF/tree/codex/windows-native-v6.0.2) branch; main defaults to PDF.js. About identifies the installed edition. GitHub Release includes all three packages and SHA256 checksums.
 
 ### Live progress and partial translations
 

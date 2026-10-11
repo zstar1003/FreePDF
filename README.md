@@ -24,19 +24,7 @@
 
 ## 📦 使用方式
 
-- windows：
-
-  - github：[https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2.exe](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2.exe)
-
-  - 夸克网盘：[https://pan.quark.cn/s/ee59aa67b65d](https://pan.quark.cn/s/ee59aa67b65d)
-
-- mac(arm64)：
-
-  - github：[https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_macOS.dmg](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_macOS.dmg)
-
-  - 夸克网盘：[https://pan.quark.cn/s/e96b0c3efc3a](https://pan.quark.cn/s/e96b0c3efc3a)
-
-  - HomeBrew：运行`brew install freepdf`
+安装包统一从 [GitHub Release](https://github.com/zstar1003/FreePDF/releases/latest) 下载。请根据操作系统和预览方式选择下方版本。
 
 ### 选择哪个版本？
 
@@ -46,7 +34,7 @@
 | [Windows 原生预览特别版](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_Windows_Native.exe) | 内置 Qt PDF，不包含 WebEngine | 遇到 Qt6WebEngineCore.dll 缺失、浏览器渲染失败或空白预览时，可直接安装此版本 |
 | [macOS ARM64 标准版](https://github.com/zstar1003/FreePDF/releases/download/v6.0.2/FreePDF_v6.0.2_macOS.dmg) | PDF.js | Apple Silicon Mac；使用 Developer ID 签名并通过 Apple 公证 |
 
-两个 Windows 安装包均提供翻译、问答、导出和日志功能。原生版会安装为 **FreePDF Native**，可与标准版共存；它的阅读工具以翻页、缩放和适宽为主。标准版预览异常时也会尝试自动切换至原生阅读器。原生版源码位于 [`codex/windows-native-v6.0.2`](https://github.com/zstar1003/FreePDF/tree/codex/windows-native-v6.0.2) 分支；主分支默认 PDF.js。“关于软件”显示当前安装包类型。GitHub Release 提供这三个安装包及 SHA256 校验文件；网盘/Homebrew 更新可能稍晚。
+两个 Windows 安装包均提供翻译、问答、导出和日志功能。原生版会安装为 **FreePDF Native**，可与标准版共存；它的阅读工具以翻页、缩放和适宽为主。标准版预览异常时也会尝试自动切换至原生阅读器。原生版源码位于 [`codex/windows-native-v6.0.2`](https://github.com/zstar1003/FreePDF/tree/codex/windows-native-v6.0.2) 分支；主分支默认 PDF.js。“关于软件”显示当前安装包类型。GitHub Release 提供这三个安装包及 SHA256 校验文件。
 
 ### 实时进度与部分译文
 
