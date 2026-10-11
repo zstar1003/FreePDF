@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QDialog, QGridLayout, QHBoxLayout, QLabel, QProgressBar, QPushButton, QTextBrowser, QVBoxLayout
+from PyQt6.QtWidgets import QDialog, QGridLayout, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSizePolicy, QTextBrowser, QVBoxLayout
 from utils.translation_logger import get_translation_logger
 from ui.theme import style_button
 
@@ -13,33 +13,40 @@ class TranslationProgressDialog(QDialog):
     def __init__(self, window):
         super().__init__(window, Qt.WindowType.Tool)
         self.setWindowTitle("翻译进度详情")
-        self.resize(500, 470)
-        self.setMinimumSize(460, 430)
+        self.resize(400, 500)
+        self.setMinimumSize(380, 430)
         self.window = window
         self.logger = get_translation_logger()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 20)
-        layout.setSpacing(14)
+        layout.setContentsMargins(20, 20, 20, 18)
+        layout.setSpacing(12)
         self.stage = QLabel()
         self.stage.setObjectName("dialogTitle")
         self.stage.setWordWrap(True)
+        self.stage.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         layout.addWidget(self.stage)
         self.filename = QLabel()
         self.filename.setObjectName("muted")
         self.filename.setWordWrap(True)
+        self.filename.setTextFormat(Qt.TextFormat.PlainText)
+        self.filename.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         layout.addWidget(self.filename)
         self.progress = QProgressBar()
+        self.progress.setObjectName("translationProgress")
         self.progress.setMinimumHeight(26)
         layout.addWidget(self.progress)
         grid = QGridLayout()
-        grid.setHorizontalSpacing(20)
-        grid.setVerticalSpacing(10)
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(8)
+        grid.setColumnStretch(1, 1)
         self.values = {}
         for row, (key, caption) in enumerate((("pages", "已保存页面"), ("current", "当前页面"),
                                              ("paragraphs", "段落处理"), ("elapsed", "已用时间"), ("waiting", "距最近进展"))):
             label = QLabel(caption)
             label.setObjectName("muted")
             value = QLabel()
+            value.setWordWrap(True)
+            value.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
             self.values[key] = value
             grid.addWidget(label, row, 0)
             grid.addWidget(value, row, 1)
@@ -47,7 +54,14 @@ class TranslationProgressDialog(QDialog):
         self.notice = QLabel()
         self.notice.setObjectName("muted")
         self.notice.setWordWrap(True)
+        self.notice.setTextFormat(Qt.TextFormat.PlainText)
+        self.notice.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         layout.addWidget(self.notice)
+        self.failure_hint = QLabel('点击“引擎配置”，切换翻译引擎，并点击“测试连接”确认可用后重试。')
+        self.failure_hint.setObjectName("muted")
+        self.failure_hint.setWordWrap(True)
+        self.failure_hint.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        layout.addWidget(self.failure_hint)
         self.events = QTextBrowser()
         self.events.setMinimumHeight(100)
         self.events.setReadOnly(True)
@@ -61,11 +75,15 @@ class TranslationProgressDialog(QDialog):
         style_button(self.resume_button, primary=True)
         self.resume_button.clicked.connect(self.resume_translation)
         footer.addWidget(self.resume_button)
+        self.engine_button = QPushButton("引擎配置")
+        style_button(self.engine_button)
+        self.engine_button.clicked.connect(self.open_engine_settings)
+        footer.addWidget(self.engine_button)
         footer.addStretch()
-        close_button = QPushButton("关闭")
-        style_button(close_button, quiet=True)
-        close_button.clicked.connect(self.close)
-        footer.addWidget(close_button)
+        self.close_button = QPushButton("关闭")
+        style_button(self.close_button)
+        self.close_button.clicked.connect(self.close)
+        footer.addWidget(self.close_button)
         layout.addLayout(footer)
         self.timer = QTimer(self)
         self.timer.setInterval(500)
@@ -89,8 +107,15 @@ class TranslationProgressDialog(QDialog):
         self.values["elapsed"].setText(f"{elapsed // 60} 分 {elapsed % 60:02d} 秒")
         waiting = int(max(0, time.monotonic() - state.get("last_activity", time.monotonic()))) if running else 0
         self.values["waiting"].setText(f"{waiting} 秒" if running else "—")
-        self.notice.setText(state.get("message") or ("已完成的页面会立即保存并显示。尚未翻译的页面暂时保留原文。" if running else
-                            "所有选定页面已完成，可导出 PDF。" if state.get("status") == "completed" else "完成的页面会保留；进度按实际保存的页面计算。"))
+        message = state.get("message", "")
+        notice = message or ("已完成的页面会立即保存并显示。尚未翻译的页面暂时保留原文。" if running else
+                             "所有选定页面已完成，可导出 PDF。" if state.get("status") == "completed" else "完成的页面会保留；进度按实际保存的页面计算。")
+        # Keep lengthy service errors in the scrollable event log and tooltip.
+        self.notice.setText(notice[:100] + "…" if len(notice) > 100 else notice)
+        self.notice.setToolTip(notice)
+        failed = state.get("status") in ("partial", "failed") and bool(message) and not message.startswith("翻译已停止")
+        self.failure_hint.setVisible(failed)
+        self.engine_button.setVisible(failed)
         lines = [line for line in self.logger.get_all_logs() if any(token in line for token in ("[阶段开始]", "[PROGRESS]", "[ERROR]", "[WARN]"))][-8:]
         text = "\n".join(lines)
         if self.events.toPlainText() != text:
@@ -101,6 +126,13 @@ class TranslationProgressDialog(QDialog):
         self.stop_button.setVisible(running and same_file and self.window.translation_manager.is_translating())
         self.resume_button.setVisible(state.get("status") in ("partial", "failed"))
         self.resume_button.setEnabled(same_file and not self.window.translation_manager.is_translating())
+        layout = self.layout()
+        layout.invalidate()
+        layout.activate()
+        # Account for wrapped labels while keeping the event log scrollable.
+        height = layout.totalHeightForWidth(self.width())
+        log_extra = max(0, self.events.sizeHint().height() - self.events.minimumHeight())
+        self.setMinimumHeight(max(430, height - log_extra))
 
     def stop_translation(self):
         self.stop_button.setEnabled(False)
@@ -115,6 +147,14 @@ class TranslationProgressDialog(QDialog):
         if self.window.current_file:
             self.window.start_translation(self.window.current_file)
         self.refresh()
+
+    def open_engine_settings(self):
+        self.hide()
+        try:
+            self.window.open_config()
+        finally:
+            self.show()
+            self.raise_()
 
     def showEvent(self, event):
         self.refresh()

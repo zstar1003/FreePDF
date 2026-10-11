@@ -1245,6 +1245,13 @@ class MainWindow(QMainWindow):
         if hasattr(self, "progress_percent"):
             self.progress_percent.setVisible(False)
         self.status_label.set_status("翻译已暂停 · 已完成页面已保留，点击查看详情" if self._partial_translation else "翻译失败 · 点击查看详情", "warning")
+        from utils.translation_logger import get_translation_logger
+        logger = get_translation_logger()
+        state = logger.get_state()
+        if state.get("message") != error_message or state.get("status") not in ("partial", "failed"):
+            logger.update_state(status="partial" if self._partial_translation else "failed",
+                                stage="翻译已暂停" if self._partial_translation else "翻译失败",
+                                message=error_message, active=0, file=self.current_file or state.get("file", ""))
         self.show_translation_details()
 
     @pyqtSlot(str)
@@ -1531,11 +1538,11 @@ class AboutDialog(QDialog):
         version.setObjectName("muted")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(version)
-        description = QLabel("让阅读跨越语言。\n保留论文排版，逐页对照原文与译文。")
+        description = QLabel("致力于构建免费的优质产品")
         description.setWordWrap(True)
         description.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(description)
-        info = QLabel('制作者：zstar  ·  微信公众号：我有一计<br><br>'
+        info = QLabel('制作者：zstar<br>联系方式：微信 zstar1003<br><br>'
                       '<a href="https://github.com/zstar1003/FreePDF" style="color:#126d66">访问 GitHub 项目</a>')
         info.setOpenExternalLinks(True)
         info.setWordWrap(True)
@@ -1549,7 +1556,7 @@ class AboutDialog(QDialog):
         layout.addStretch()
         buttons = QHBoxLayout()
         self.export_logs_btn = QPushButton("导出日志")
-        style_button(self.export_logs_btn, "export")
+        style_button(self.export_logs_btn, "export", quiet=True)
         self.export_logs_btn.clicked.connect(self.export_logs)
         buttons.addWidget(self.export_logs_btn)
         self.update_btn = QPushButton("检查更新")
@@ -1558,7 +1565,7 @@ class AboutDialog(QDialog):
         buttons.addWidget(self.update_btn)
         buttons.addStretch()
         close_btn = QPushButton("关闭")
-        style_button(close_btn, quiet=True)
+        style_button(close_btn)
         close_btn.clicked.connect(self.accept)
         buttons.addWidget(close_btn)
         layout.addLayout(buttons)

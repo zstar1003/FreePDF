@@ -36,6 +36,7 @@ QCheckBox { spacing: 8px; padding: 4px; }
 QCheckBox::indicator { width: 18px; height: 18px; }
 QProgressBar { border: 0; border-radius: 5px; background: #deeaed; text-align: center; min-height: 8px; }
 QProgressBar::chunk { background: #168577; border-radius: 5px; }
+QProgressBar#translationProgress { min-height: 26px; max-height: 26px; }
 QSplitter::handle { background: transparent; width: 10px; }
 QScrollBar:vertical { background: #f2f6f7; width: 10px; margin: 2px; }
 QScrollBar::handle:vertical { background: #b6cbd1; border-radius: 4px; min-height: 30px; }
