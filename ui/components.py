@@ -6,6 +6,7 @@ import threading
 import requests
 
 from utils.diagnostics import register_secrets
+from utils.qa_endpoint import resolve_qa_endpoint
 
 try:
     from markdown_it import MarkdownIt
@@ -748,11 +749,18 @@ class TranslationConfigDialog(QDialog):
         elif service == "自定义":
             # 自定义问答引擎
             self.custom_qa_host = QLineEdit()
-            self.custom_qa_host.setPlaceholderText("https://api.siliconflow.cn")
+            self.custom_qa_host.setPlaceholderText("https://api.example.com/v1")
+            self.custom_qa_host.setToolTip(
+                "支持主机地址、API 基础路径或完整 /chat/completions 地址；"
+                "需兼容 OpenAI 请求与流式响应格式"
+            )
+            self.custom_qa_endpoint = QLineEdit()
+            self.custom_qa_endpoint.setPlaceholderText("可选: 完整接口地址，填写后覆盖 Host")
+            self.custom_qa_endpoint.setToolTip("原样使用此地址，不自动添加路径；需兼容 OpenAI 格式")
             self.custom_qa_key = QLineEdit()
             self.custom_qa_key.setPlaceholderText("可选: API Key")
             self.custom_qa_model = QLineEdit()
-            self.custom_qa_model.setPlaceholderText("可选: 模型")
+            self.custom_qa_model.setPlaceholderText("必填: 模型")
 
             self.qa_test_btn = QPushButton("测试连接")
             self.qa_test_btn.clicked.connect(self._test_qa_connection)
@@ -775,6 +783,7 @@ class TranslationConfigDialog(QDialog):
             """)
 
             self.qa_env_layout.addRow("Host:", self.custom_qa_host)
+            self.qa_env_layout.addRow("完整接口 URL:", self.custom_qa_endpoint)
             self.qa_env_layout.addRow("API Key:", self.custom_qa_key)
             self.qa_env_layout.addRow("模型:", self.custom_qa_model)
             self.qa_env_layout.addRow("", self.qa_test_btn)
@@ -974,6 +983,8 @@ class TranslationConfigDialog(QDialog):
         elif qa_service == "自定义":
             if hasattr(self, "custom_qa_host") and self.custom_qa_host.text().strip():
                 qa_config["envs"]["CUSTOM_HOST"] = self.custom_qa_host.text().strip()
+            if hasattr(self, "custom_qa_endpoint") and self.custom_qa_endpoint.text().strip():
+                qa_config["envs"]["CUSTOM_API_URL"] = self.custom_qa_endpoint.text().strip()
             if hasattr(self, "custom_qa_key") and self.custom_qa_key.text().strip():
                 qa_config["envs"]["CUSTOM_KEY"] = self.custom_qa_key.text().strip()
             if hasattr(self, "custom_qa_model") and self.custom_qa_model.text().strip():
@@ -1064,6 +1075,8 @@ class TranslationConfigDialog(QDialog):
             self.qa_ollama_model.setText(qa_envs["OLLAMA_MODEL"])
         if hasattr(self, "custom_qa_host") and "CUSTOM_HOST" in qa_envs:
             self.custom_qa_host.setText(qa_envs["CUSTOM_HOST"])
+        if hasattr(self, "custom_qa_endpoint") and "CUSTOM_API_URL" in qa_envs:
+            self.custom_qa_endpoint.setText(qa_envs["CUSTOM_API_URL"])
         if hasattr(self, "custom_qa_key") and "CUSTOM_KEY" in qa_envs:
             self.custom_qa_key.setText(qa_envs["CUSTOM_KEY"])
         if hasattr(self, "custom_qa_model") and "CUSTOM_MODEL" in qa_envs:
@@ -1160,6 +1173,7 @@ class TranslationConfigDialog(QDialog):
         self._perform_connection_test(service, url, headers, expect_model, is_qa=False)
 
     def _test_qa_connection(self):
+        endpoint = None
         service = self.qa_service_combo.currentText()
         url = ""
         headers = {}
@@ -1167,6 +1181,7 @@ class TranslationConfigDialog(QDialog):
 
         if service == "自定义" and hasattr(self, "custom_qa_host"):
             url = self.custom_qa_host.text().strip()
+            endpoint = self.custom_qa_endpoint.text().strip()
             expect_model = (
                 self.custom_qa_model.text().strip()
                 if hasattr(self, "custom_qa_model")
@@ -1194,20 +1209,22 @@ class TranslationConfigDialog(QDialog):
                 )
 
         # 检查模型是否为空
-        if service in ("silicon", "ollama") and not expect_model:
+        if service in ("silicon", "ollama", "自定义") and not expect_model:
             QMessageBox.warning(
                 self, "测试连接", f"{service} 服务需要指定模型名称，请填写模型字段"
             )
             return
 
-        if not url:
+        if not (url or endpoint):
             QMessageBox.warning(self, "测试连接", "缺少可测试的 Host")
             return
 
-        self._perform_connection_test(service, url, headers, expect_model, is_qa=True)
+        self._perform_connection_test(
+            service, url, headers, expect_model, is_qa=True, endpoint=endpoint
+        )
 
     def _perform_connection_test(
-        self, service, url, headers, expect_model=None, is_qa=False
+        self, service, url, headers, expect_model=None, is_qa=False, endpoint=None
     ):
         register_secrets(headers)
         # 按钮引用
@@ -1316,11 +1333,11 @@ class TranslationConfigDialog(QDialog):
                     ok = r.status_code == 200
                     msg = f"状态码: {r.status_code}, 响应: {r.text[:200] if r.text else ''}" if not ok else ""
                 elif service == "自定义" and is_qa:
-                    # 自定义QA服务
-                    # 如果URL已包含chat/completions则直接使用，否则拼接
-                    custom_url = url.rstrip("/")
-                    if not custom_url.endswith("/chat/completions"):
-                        custom_url = custom_url + "/chat/completions"
+                    # 与实际自定义问答使用相同的 URL 解析规则
+                    if not expect_model:
+                        raise ValueError("自定义问答引擎需要 CUSTOM_MODEL")
+                    custom_url = resolve_qa_endpoint(url, endpoint)
+                    headers["Content-Type"] = "application/json"
                     payload = {
                         "model": expect_model,
                         "messages": [{"role": "user", "content": "ping"}],

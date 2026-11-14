@@ -9,6 +9,7 @@ from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
 from utils.text_processor import text_processor
 from utils.config_path import get_config_file_path
+from utils.qa_endpoint import resolve_qa_endpoint
 
 
 class QAEngineThread(QThread):
@@ -187,12 +188,18 @@ class QAEngineThread(QThread):
         """处理自定义问答引擎"""
         envs = self.config.get("envs", {})
         api_url = envs.get("CUSTOM_HOST")
+        endpoint = envs.get("CUSTOM_API_URL")
         api_key = envs.get("CUSTOM_KEY")  # 可选
         model = envs.get("CUSTOM_MODEL")
-        url = api_url.rstrip('/') + "/v1/chat/completions"
 
-        if not api_url or not model:
-            self.response_failed.emit("自定义问答引擎配置不完整 (需要 CUSTOM_API_URL 和 CUSTOM_MODEL)")
+        if not (api_url or endpoint) or not model:
+            self.response_failed.emit("自定义问答引擎配置不完整 (需要 CUSTOM_HOST 或 CUSTOM_API_URL，以及 CUSTOM_MODEL)")
+            return
+
+        try:
+            url = resolve_qa_endpoint(api_url, endpoint)
+        except ValueError as exc:
+            self.response_failed.emit(str(exc))
             return
 
         # 构建消息
