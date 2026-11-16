@@ -277,6 +277,16 @@ The question-answering engine supports Silicon-based streaming (online), Ollama 
 
 **Answer:** pdf2zh currently does not support translating table content. To translate tables, please check the `dev` branch of this repository and use `pdf2zh_next`. However, due to its slow speed, it hasn't been merged into the main branch.
 
+4. Windows reports “Error opening file for writing” for `C:\Program Files\FreePDF\internal\ucrtbase.dll`.
+
+**Answer:** This is a file-write failure. The filename alone does not establish antivirus interference, insufficient permissions, or runtime corruption. Keep security protection enabled and diagnose first:
+
+   - Save your work and exit FreePDF. Check Task Manager for remaining FreePDF processes or its child processes before retrying installation. If writing still fails, restart Windows and retry to rule out files held open by an old process.
+   - Verify that the installer came from [this project's Releases](https://github.com/zstar1003/FreePDF/releases). Record the full error path, whether it occurred during installation, upgrade, or launch, and the Windows and FreePDF versions.
+   - Check Windows Security's [Protection history](https://support.microsoft.com/en-us/windows/security/windows-security/protection-history-in-the-windows-security-app) or your security product's logs. If something was blocked, retain the detection name and file path for the maintainer or device administrator to investigate. Do not disable protection, add exclusions, or allow an unknown file.
+   - The current installer targets Program Files and already requests administrator privileges through Windows UAC. This does not mean that everyday use of FreePDF requires running as administrator. If installation approval is denied or the device is managed by an organization, contact its administrator rather than changing folder permissions or bypassing security policy.
+   - If the problem persists, submit a redacted error screenshot and the environment details above. Application logs may not exist yet if installation failed. Do not download `ucrtbase.dll` from third-party DLL sites or manually overwrite the system copy. UCRT is an operating-system component on Windows 10 and later; see [Microsoft's UCRT deployment guidance](https://learn.microsoft.com/en-us/cpp/windows/universal-crt-deployment?view=msvc-170). A write failure is not the same as a missing runtime; establish the cause first.
+
 For other questions, please submit an issue or contact me directly via WeChat (zstar1003) to report problems.
 
 ## 🛠️ How to Contribute

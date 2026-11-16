@@ -194,7 +194,13 @@ python main.py
   **回答：** pdf2zh暂不支持表格内容翻译，如需翻译表格，可查看本仓库的`dev`分支，采用`pdf2zh_next`进行翻译，但由于速度较慢，未合并进主分支。
 
 4. win版报错：无法打开要写入的文件 `C:\Program Files\FreePDF\internal\ucrtbase.dll`
-  **回答：** 关闭杀毒软件，右键用管理员身份运行软件。
+  **回答：** 这是文件写入失败的提示，不能仅凭文件名判断是杀毒拦截、权限不足或运行库损坏。请保持安全防护开启，先按以下步骤排查：
+
+   - 保存工作并退出 FreePDF；确认任务管理器中没有残留的 FreePDF 或其子进程，再重试安装。仍无法写入时，可重启 Windows 后重试，避免旧进程占用文件。
+   - 确认安装包来自[本项目 Releases](https://github.com/zstar1003/FreePDF/releases)，并记录完整错误路径、发生阶段（安装、升级或启动）、Windows 版本和 FreePDF 版本。
+   - 查看 Windows 安全中心的[保护历史记录](https://support.microsoft.com/en-us/windows/security/windows-security/protection-history-in-the-windows-security-app)或所用安全软件的日志。若有拦截，保留检测名称和文件路径，交由维护者或设备管理员核查；不要关闭防护、添加排除项或直接放行未知文件。
+   - 当前安装器默认写入 Program Files，并已声明需要管理员权限，由 Windows 的 UAC 提示授权。这不意味着日常运行 FreePDF 也需要管理员权限。若安装授权被拒绝或设备受组织策略管理，请联系设备管理员，不要修改目录权限或绕过安全策略。
+   - 若问题持续，请提交脱敏后的错误截图和上述环境信息。安装阶段失败时，应用日志可能尚未生成。不要从第三方 DLL 网站下载或手动覆盖系统的 `ucrtbase.dll`；Windows 10 及更新版本的 UCRT 属于系统组件，参见 [Microsoft UCRT 部署说明](https://learn.microsoft.com/en-us/cpp/windows/universal-crt-deployment?view=msvc-170)。写入失败与缺少运行库是不同问题，应先确认原因。
 
 如有其它问题，欢迎提交 issue 或 直接联系我的微信 zstar1003 反馈问题。
 
